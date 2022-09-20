@@ -28,6 +28,9 @@
 #define EVENT_BUS_FLAGS_RETAIN (1UL << 0)
 #define EVENT_BUS_BITS 32
 
+#include <FreeRTOS.h>
+#include <task.h>
+
 typedef struct {
 	uint32_t event;
 	void * ptr;
@@ -50,6 +53,7 @@ void subscribeEvent(event_t *event);
 void unSubscribeEvent(event_t *event);
 void publishEvent(event_params_t *event);
 void invalidateEvent(event_params_t *event);
+TaskHandle_t eventBusProcessHandle(void);
 
 #endif /* EVENTBUS_H */
 
