@@ -39,33 +39,33 @@ static StaticTask_t xTaskBufferTest;
 static uint32_t results[6];
 
 void callback1(event_params_t *eventParams) {
-  results[1] = eventParams->params;
+  results[1] = eventParams->len;
   printf("callback1 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->params, eventParams->ptr);
+         eventParams->len, eventParams->ptr);
 }
 
 void callback2(event_params_t *eventParams) {
-  results[2] = eventParams->params;
+  results[2] = eventParams->len;
   printf("callback2 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->params, eventParams->ptr);
+         eventParams->len, eventParams->ptr);
 }
 
 void callback3(event_params_t *eventParams) {
-  results[3] = eventParams->params;
+  results[3] = eventParams->len;
   printf("callback3 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->params, eventParams->ptr);
+         eventParams->len, eventParams->ptr);
 }
 
 void callback4(event_params_t *eventParams) {
-  results[4] = eventParams->params;
+  results[4] = eventParams->len;
   printf("callback4 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->params, eventParams->ptr);
+         eventParams->len, eventParams->ptr);
 }
 
 void callback5(event_params_t *eventParams) {
-  results[5] = eventParams->params;
+  results[5] = eventParams->len;
   printf("callback5 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->params, eventParams->ptr);
+         eventParams->len, eventParams->ptr);
 }
 
 event_t ev1 = {.eventMask = 0x01, .callback = callback1};
@@ -82,7 +82,7 @@ static void TestTask(void *pvParameters) {
   event_params_t t;
   t.ptr = NULL;
   t.event = 1UL;
-  t.params = 123456;
+  t.len = 4;
   t.flags = EVENT_BUS_FLAGS_RETAIN;
   // Test retain
   publishEvent(&t);
@@ -91,8 +91,8 @@ static void TestTask(void *pvParameters) {
     ExitProcess(EXIT_FAILURE);
   }
   subscribeEvent(&ev1);
-  if (results[1] != 123456) {
-    printf("Test failed %i != %i\r\n", results[1], 123456);
+  if (results[1] != 4) {
+    printf("Test failed %i != %i\r\n", results[1], 4);
     ExitProcess(EXIT_FAILURE);
   }
   printf("Passed Retain test\r\n");
@@ -111,10 +111,10 @@ static void TestTask(void *pvParameters) {
   subscribeEvent(&ev3);
   subscribeEvent(&ev4);
   t.flags = 0;
-  t.params = 2;
+  t.len = 2;
   t.event = 0x02;
   publishEvent(&t);
-  t.params = 4;
+  t.len = 4;
   t.event = 0x08;
   publishEvent(&t);
   if (results[2] != 2 && results[4] != 4) {

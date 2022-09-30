@@ -34,7 +34,7 @@
 typedef struct {
 	uint32_t event;
 	void * ptr;
-	uint32_t params;
+	uint32_t len;
 	uint32_t flags;
 } event_params_t;
 
