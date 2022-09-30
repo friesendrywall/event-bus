@@ -40,6 +40,7 @@ typedef struct {
   TaskHandle_t xCallingTask;
   uint32_t command;
   uint32_t params;
+  uint32_t callerId;
   void *eventData;
 } EVENT_CMD;
 

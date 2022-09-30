@@ -32,19 +32,20 @@
 #include <task.h>
 
 typedef struct {
-	uint32_t event;
-	void * ptr;
-	uint32_t len;
-	uint32_t flags;
+  uint32_t event;
+  void *ptr;
+  uint32_t flags;
+  uint16_t len;
+  uint16_t publisherId;
 } event_params_t;
 
 typedef void (*eventCallback)(event_params_t *);
 
 struct EVENT_T {
-	uint32_t eventMask;
-	eventCallback callback;
-	struct EVENT_T * prev;
-	struct EVENT_T * next;
+  uint32_t eventMask;
+  eventCallback callback;
+  struct EVENT_T *prev;
+  struct EVENT_T *next;
 };
 typedef struct EVENT_T event_t;
 

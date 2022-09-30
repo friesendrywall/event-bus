@@ -46,8 +46,8 @@ void callback1(event_params_t *eventParams) {
 
 void callback2(event_params_t *eventParams) {
   results[2] = eventParams->len;
-  printf("callback2 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->len, eventParams->ptr);
+  printf("callback2 event(0x%X) %i (0x%p) %i\r\n", eventParams->event,
+         eventParams->len, eventParams->ptr, eventParams->publisherId);
 }
 
 void callback3(event_params_t *eventParams) {
@@ -113,6 +113,7 @@ static void TestTask(void *pvParameters) {
   t.flags = 0;
   t.len = 2;
   t.event = 0x02;
+  t.publisherId = 5;
   publishEvent(&t);
   t.len = 4;
   t.event = 0x08;
