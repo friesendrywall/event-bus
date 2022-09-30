@@ -25,23 +25,36 @@
 #ifndef EVENTBUS_H
 #define EVENTBUS_H
 
-#define EVENT_BUS_FLAGS_RETAIN (1UL << 0)
+#define EVENT_BUS_FLAGS_NONE       ( 0 )
+#define EVENT_BUS_FLAGS_RETAIN     (1U << 0)
+
 #define EVENT_BUS_BITS 32
 
+#include "FreeRTOS.h"
+#include "message_buffer.h"
+#include "event_bus_config.h"
+
 typedef struct {
-	uint32_t event;
-	void * ptr;
-	uint32_t params;
-	uint32_t flags;
+  uint32_t event;
+  uint16_t len;
+  uint16_t flags;
+  void *ptr;
+  MessageBufferHandle_t ignore;
 } event_params_t;
 
-typedef void(*eventCallback) (event_params_t*);
+typedef struct {
+  uint32_t event;
+  uint16_t len;
+  uint16_t flags;
+  uint8_t data[EVENT_BUS_MAX_DATA_LEN];
+} event_msg_t;
 
 struct EVENT_T {
-	uint32_t eventMask;
-	eventCallback callback;
-	struct EVENT_T * prev;
-	struct EVENT_T * next;
+  uint32_t eventMask;
+  MessageBufferHandle_t msgBuffHandle;
+  uint32_t errFull : 1;
+  struct EVENT_T *prev;
+  struct EVENT_T *next;
 };
 typedef struct EVENT_T event_t;
 

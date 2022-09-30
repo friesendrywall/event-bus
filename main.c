@@ -34,95 +34,108 @@
 #include <semphr.h>
 #include <task.h>
 #include <timers.h>
-static StackType_t xStackTest[512];
-static StaticTask_t xTaskBufferTest;
+static StackType_t xStackTest1[512];
+static StaticTask_t xTaskBufferTest1;
+static StackType_t xStackTest2[512];
+static StaticTask_t xTaskBufferTest2;
 static uint32_t results[6];
 
-void callback1(event_params_t *eventParams) {
-  results[1] = eventParams->params;
-  printf("callback1 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->params, eventParams->ptr);
-}
+#define STORAGE_SIZE_BYTES 2048
 
-void callback2(event_params_t *eventParams) {
-  results[2] = eventParams->params;
-  printf("callback2 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->params, eventParams->ptr);
-}
+static uint8_t ucMessageBufferStorage1[STORAGE_SIZE_BYTES];
+static uint8_t ucMessageBufferStorage2[STORAGE_SIZE_BYTES];
+static MessageBufferHandle_t threadHandle1;
+static MessageBufferHandle_t threadHandle2;
+static StaticMessageBuffer_t xMessageBufferStruct1;
+static StaticMessageBuffer_t xMessageBufferStruct2;
 
-void callback3(event_params_t *eventParams) {
-  results[3] = eventParams->params;
-  printf("callback3 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->params, eventParams->ptr);
-}
-
-void callback4(event_params_t *eventParams) {
-  results[4] = eventParams->params;
-  printf("callback4 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->params, eventParams->ptr);
-}
-
-void callback5(event_params_t *eventParams) {
-  results[5] = eventParams->params;
-  printf("callback5 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->params, eventParams->ptr);
-}
-
-event_t ev1 = {.eventMask = 0x01, .callback = callback1};
-
-event_t ev2 = {.eventMask = 0x02, .callback = callback2};
-
-event_t ev3 = {.eventMask = 0x04, .callback = callback3};
-
-event_t ev4 = {.eventMask = 0x08, .callback = callback4};
-
-static void TestTask(void *pvParameters) {
+static void TestTask1(void *pvParameters) {
   static int i = 0;
   (void)pvParameters;
-  event_params_t t;
-  t.ptr = NULL;
-  t.event = 1UL;
-  t.params = 123456;
-  t.flags = EVENT_BUS_FLAGS_RETAIN;
-  // Test retain
-  publishEvent(&t);
-  if (results[1]) {
-    printf("Test failed\r\n");
+  event_t eventList = {.eventMask = 0x3F, .msgBuffHandle = threadHandle1};
+  event_params_t evIgnore = {
+      .event = 0x20, .len = 8, .ptr = "Event I", .ignore = threadHandle1};
+  uint32_t satisfied[4] = {0};
+  vTaskDelay(500 / portTICK_PERIOD_MS);
+  subscribeEvent(&eventList);
+  event_msg_t msg = {0};
+  publishEvent(&evIgnore);
+  for (;;) {
+    memset(&msg, 0, sizeof(msg));
+    size_t res = xMessageBufferReceive(threadHandle1, &msg, sizeof(event_msg_t),
+                                       5000 / portTICK_PERIOD_MS);
+    if (res == 0) {
+      printf("Event timeout failure\r\n");
+      ExitProcess(EXIT_FAILURE);
+    }
+    printf("RX-1 (%i) event(0x%04X) flags(0x%04X) %s\r\n", msg.len, msg.event,
+           msg.flags, (char *)msg.data);
+    switch (msg.event) {
+    case 0x01:
+      satisfied[0] = memcmp(msg.data, "Event 1", 7) == 0 &&
+                     msg.flags & EVENT_BUS_FLAGS_RETAIN;
+      break;
+    case 0x02:
+      satisfied[1] = memcmp(msg.data, "Event 2", 7) == 0;
+      break;
+    case 0x04:
+      satisfied[2] = memcmp(msg.data, "Event 3", 7) == 0;
+      break;
+    case 0x08:
+      satisfied[3] = memcmp(msg.data, "Event 4", 7) == 0;
+      break;
+    case 0x10:
+      for (i = 0; i < 4; i++) {
+        if (!satisfied[i]) {
+          printf("Event %i not received\r\n", i);
+          ExitProcess(EXIT_FAILURE);
+        }
+      }
+      printf("All events received\r\n");
+      ExitProcess(EXIT_SUCCESS);
+      break;
+    default:
+      printf("Default message error event was %i\r\n", msg.event);
+      ExitProcess(EXIT_FAILURE);
+      break;
+    }
+  }
+}
+
+static void TestTask2(void *pvParameters) {
+  static int i = 0;
+  (void)pvParameters;
+  event_params_t ev1 = {.event = 0x01,
+                        .len = 8,
+                        .flags = EVENT_BUS_FLAGS_RETAIN,
+                        .ptr = "Event 1"};
+  event_params_t ev2 = {.event = 0x02, .len = 8, .ptr = "Event 2"};
+  event_params_t ev3 = {.event = 0x04, .len = 8, .ptr = "Event 3"};
+  event_params_t ev4 = {.event = 0x08, .len = 8, .ptr = "Event 4"};
+  event_params_t evComplete = {.event = 0x10, .len = 0, .ptr = "Done   "};
+  event_t eventList = {.eventMask = 0x20, .msgBuffHandle = threadHandle2};
+  event_msg_t msg = {0};
+  subscribeEvent(&eventList);
+  publishEvent(&ev1);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  publishEvent(&ev2);
+  publishEvent(&ev3);
+  publishEvent(&ev4);
+  size_t res = xMessageBufferReceive(threadHandle2, &msg, sizeof(event_msg_t),
+                                     5000 / portTICK_PERIOD_MS);
+  if (res == 0) {
+    printf("Ignored event not received\r\n");
     ExitProcess(EXIT_FAILURE);
   }
-  subscribeEvent(&ev1);
-  if (results[1] != 123456) {
-    printf("Test failed %i != %i\r\n", results[1], 123456);
+  if (msg.event != 0x20) {
+    printf("Ignored event not received\r\n");
     ExitProcess(EXIT_FAILURE);
+  } else {
+    printf("RX-2 (%i) event(0x%04X) flags(0x%04X) %s\r\n", msg.len, msg.event,
+           msg.flags, (char *)msg.data);
   }
-  printf("Passed Retain test\r\n");
-  // Test delete
-  results[1] = 0;
-  unSubscribeEvent(&ev1);
-  invalidateEvent(&t);
-  subscribeEvent(&ev1);
-  if (results[1] != 0) {
-    printf("Test failed %i != %i\r\n", results[1], 0);
-    ExitProcess(EXIT_FAILURE);
-  }
-  printf("Passed Invalidate test\r\n");
-  subscribeEvent(&ev1);
-  subscribeEvent(&ev2);
-  subscribeEvent(&ev3);
-  subscribeEvent(&ev4);
-  t.flags = 0;
-  t.params = 2;
-  t.event = 0x02;
-  publishEvent(&t);
-  t.params = 4;
-  t.event = 0x08;
-  publishEvent(&t);
-  if (results[2] != 2 && results[4] != 4) {
-    printf("Test failed at core publish\r\n");
-    ExitProcess(EXIT_FAILURE);
-  }
-  printf("All tests passed\r\n");
-  ExitProcess(EXIT_FAILURE);
+  publishEvent(&evComplete);
+  vTaskDelay(portMAX_DELAY);
 }
 
 /*
@@ -130,8 +143,17 @@ static void TestTask(void *pvParameters) {
  */
 int main(int argc, char **argv) {
 
-  (void)xTaskCreateStatic(TestTask, "Test something", 512, NULL, 1, xStackTest,
-                          &xTaskBufferTest);
+  (void)xTaskCreateStatic(TestTask1, "Test 1", 512, NULL, 1, xStackTest1,
+                          &xTaskBufferTest1);
+  (void)xTaskCreateStatic(TestTask2, "Test 2", 512, NULL, 1, xStackTest2,
+                          &xTaskBufferTest2);
+  threadHandle1 = xMessageBufferCreateStatic(sizeof(ucMessageBufferStorage1),
+                                             ucMessageBufferStorage1,
+                                             &xMessageBufferStruct1);
+
+  threadHandle2 = xMessageBufferCreateStatic(sizeof(ucMessageBufferStorage2),
+                                             ucMessageBufferStorage2,
+                                             &xMessageBufferStruct2);
   initEventBus();
   vTaskStartScheduler();
   return (EXIT_SUCCESS);
