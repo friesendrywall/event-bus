@@ -38,7 +38,7 @@ typedef struct {
 	uint32_t flags;
 } event_params_t;
 
-typedef void(*eventCallback) (event_params_t*);
+typedef void (*eventCallback)(event_params_t *);
 
 struct EVENT_T {
 	uint32_t eventMask;
@@ -49,6 +49,8 @@ struct EVENT_T {
 typedef struct EVENT_T event_t;
 
 void initEventBus(void);
+void subscribeAdd(event_t *event, uint32_t eventMask);
+void subscribeRemove(event_t *event, uint32_t eventMask);
 void subscribeEvent(event_t *event);
 void unSubscribeEvent(event_t *event);
 void publishEvent(event_params_t *event);

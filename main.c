@@ -74,7 +74,7 @@ event_t ev2 = {.eventMask = 0x02, .callback = callback2};
 
 event_t ev3 = {.eventMask = 0x04, .callback = callback3};
 
-event_t ev4 = {.eventMask = 0x08, .callback = callback4};
+event_t ev4 = {.eventMask = 0xFF, .callback = callback4};
 
 static void TestTask(void *pvParameters) {
   static int i = 0;

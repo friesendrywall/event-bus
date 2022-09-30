@@ -31,6 +31,7 @@
 #include <task.h>
 #include <timers.h>
 #include "event_bus.h"
+#include "event_bus_config.h"
 
 static event_t *firstEvent = NULL;
 static event_params_t *retainedEvents[EVENT_BUS_BITS];
@@ -38,20 +39,27 @@ static event_params_t *retainedEvents[EVENT_BUS_BITS];
 typedef struct {
   TaskHandle_t xCallingTask;
   uint32_t command;
+  uint32_t params;
   void *eventData;
 } EVENT_CMD;
 
 /* FreeRTOS Stack allocation */
 #define STACK_SIZE configMINIMAL_STACK_SIZE
-#define MAX_CMD_QUEUE 16
 static StackType_t xStack[STACK_SIZE];
 static StaticTask_t xTaskBuffer;
 static StaticQueue_t xStaticQueue;
-static uint8_t ucQueueStorage[MAX_CMD_QUEUE * sizeof(EVENT_CMD)];
+static uint8_t ucQueueStorage[EVENT_BUS_MAX_CMD_QUEUE * sizeof(EVENT_CMD)];
 static TaskHandle_t processHandle = NULL;
 static QueueHandle_t xQueueCmd = NULL;
 
-enum { CMD_SUBSCRIBE, CMD_UNSUBSCRIBE, CMD_NEW_EVENT, CMD_INVALIDATE_EVENT };
+enum {
+  CMD_SUBSCRIBE,
+  CMD_UNSUBSCRIBE,
+  CMD_NEW_EVENT,
+  CMD_INVALIDATE_EVENT,
+  CMD_SUBSCRIBE_ADD,
+  CMD_SUBSCRIBE_REMOVE
+};
 
 static uint32_t multipleBitsSet(uint32_t n) { return n & (n - 1); }
 
@@ -76,6 +84,24 @@ static void prvPublishEvent(event_params_t *eventParams) {
     }
     ev = ev->next;
   }
+}
+
+static void prvSubscribeAdd(event_t *event, uint32_t newEventMask) {
+  uint32_t i;
+  event->eventMask |= newEventMask;
+  /* Search for any retained events */
+  for (i = 0; i < EVENT_BUS_BITS; i++) {
+    if (((1UL << i) & newEventMask) && retainedEvents[i] &&
+        (retainedEvents[i]->flags & EVENT_BUS_FLAGS_RETAIN) &&
+        event->callback != NULL) {
+      event->callback(retainedEvents[i]);
+      break;
+    }
+  }
+}
+
+static void prvSubscribeRemove(event_t *event, uint32_t newEventMask) {
+  event->eventMask &= ~(newEventMask);
 }
 
 static void prvSubscribeEvent(event_t *event) {
@@ -168,48 +194,66 @@ static void eventBusTasks(void *pvParameters) {
       prvInvdaliteEvent(cmd.eventData);
       xTaskNotifyGive(cmd.xCallingTask);
       break;
+    case CMD_SUBSCRIBE_ADD:
+      prvSubscribeAdd(cmd.eventData, cmd.params);
+      xTaskNotifyGive(cmd.xCallingTask);
+      break;
+    case CMD_SUBSCRIBE_REMOVE:
+      prvSubscribeRemove(cmd.eventData, cmd.params);
+      xTaskNotifyGive(cmd.xCallingTask);
+      break;
     default:
       break;
     }
   }
 }
 
+void subscribeAdd(event_t *event, uint32_t eventMask) {
+  configASSERT(event);
+  EVENT_CMD cmd = {
+      .command = CMD_SUBSCRIBE_ADD, .eventData = event, .params = eventMask};
+  cmd.xCallingTask = xTaskGetCurrentTaskHandle();
+  xQueueSendToFront(xQueueCmd, (void *)&cmd, portMAX_DELAY);
+  ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+}
+
+void subscribeRemove(event_t *event, uint32_t eventMask) {
+  configASSERT(event);
+  EVENT_CMD cmd = {
+      .command = CMD_SUBSCRIBE_REMOVE, .eventData = event, .params = eventMask};
+  cmd.xCallingTask = xTaskGetCurrentTaskHandle();
+  xQueueSendToFront(xQueueCmd, (void *)&cmd, portMAX_DELAY);
+  ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+}
+
 void subscribeEvent(event_t *event) {
   configASSERT(event);
-  EVENT_CMD cmd;
+  EVENT_CMD cmd = {.command = CMD_SUBSCRIBE, .eventData = event};
   cmd.xCallingTask = xTaskGetCurrentTaskHandle();
-  cmd.command = CMD_SUBSCRIBE;
-  cmd.eventData = event;
   xQueueSendToFront(xQueueCmd, (void *)&cmd, portMAX_DELAY);
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
 
 void unSubscribeEvent(event_t *event) {
   configASSERT(event);
-  EVENT_CMD cmd;
+  EVENT_CMD cmd = {.command = CMD_UNSUBSCRIBE, .eventData = event};
   cmd.xCallingTask = xTaskGetCurrentTaskHandle();
-  cmd.command = CMD_UNSUBSCRIBE;
-  cmd.eventData = event;
   xQueueSendToFront(xQueueCmd, (void *)&cmd, portMAX_DELAY);
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
 
 void publishEvent(event_params_t *event) {
   configASSERT(event);
-  EVENT_CMD cmd;
+  EVENT_CMD cmd = {.command = CMD_NEW_EVENT, .eventData = event};
   cmd.xCallingTask = xTaskGetCurrentTaskHandle();
-  cmd.command = CMD_NEW_EVENT;
-  cmd.eventData = event;
   xQueueSendToFront(xQueueCmd, (void *)&cmd, portMAX_DELAY);
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
 
 void invalidateEvent(event_params_t *event) {
   configASSERT(event);
-  EVENT_CMD cmd;
+  EVENT_CMD cmd = {.command = CMD_INVALIDATE_EVENT, .eventData = event};
   cmd.xCallingTask = xTaskGetCurrentTaskHandle();
-  cmd.command = CMD_INVALIDATE_EVENT;
-  cmd.eventData = event;
   xQueueSendToFront(xQueueCmd, (void *)&cmd, portMAX_DELAY);
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
@@ -217,7 +261,7 @@ void invalidateEvent(event_params_t *event) {
 void initEventBus(void) {
   processHandle = xTaskCreateStatic(eventBusTasks, "Event-Bus", 
       STACK_SIZE, NULL, (configMAX_PRIORITIES - 2), xStack, &xTaskBuffer);
-  xQueueCmd = xQueueCreateStatic(MAX_CMD_QUEUE, sizeof(EVENT_CMD),
+  xQueueCmd = xQueueCreateStatic(EVENT_BUS_MAX_CMD_QUEUE, sizeof(EVENT_CMD),
                                  ucQueueStorage, &xStaticQueue);
   configASSERT(xQueueCmd != NULL);
 }

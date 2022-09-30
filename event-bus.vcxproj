@@ -75,7 +75,7 @@
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>D:\repos\event-bus\FreeRTOS-Kernel\portable\MSVC-MingW;D:\repos\event-bus;D:\repos\event-bus\src;D:\repos\event-bus\FreeRTOS-Kernel\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.\FreeRTOS-Kernel\portable\MSVC-MingW;.;.\src;.\FreeRTOS-Kernel\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <TargetMachine>MachineX86</TargetMachine>
