@@ -24,6 +24,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 /* Kernel includes. */
 #include <FreeRTOS.h>
 #include <message_buffer.h>
