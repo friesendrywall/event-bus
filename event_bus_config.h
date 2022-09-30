@@ -3,6 +3,5 @@
 
 #define EVENT_BUS_MAX_DATA_LEN 256
 #define EVENT_BUS_MAX_CMD_QUEUE 32
-#define EVENT_BUS_CUSTOM_INIT
 
 #endif

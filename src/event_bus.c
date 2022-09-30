@@ -25,13 +25,13 @@
 #include <stdint.h>
 #include <stdio.h>
 /* Kernel includes. */
-#include "event_bus.h"
 #include <FreeRTOS.h>
 #include <message_buffer.h>
 #include <queue.h>
 #include <semphr.h>
 #include <task.h>
 #include <timers.h>
+#include "event_bus.h"
 
 static event_t *firstEvent = NULL;
 static event_msg_t retainedEvents[EVENT_BUS_BITS];
@@ -93,8 +93,8 @@ static void prvPublishEvent(event_params_t *eventParams) {
 
 static void prvSubscribeEvent(event_t *event) {
   uint32_t i;
-  configASSERT(event);
   event_t *ev;
+  configASSERT(event);
   if (firstEvent == NULL) {
     firstEvent = event;
     firstEvent->prev = NULL;
@@ -237,5 +237,8 @@ void initEventBus(void) {
   xQueueCmd = xQueueCreateStatic(EVENT_BUS_MAX_CMD_QUEUE, sizeof(EVENT_CMD),
                                  ucQueueStorage, &xStaticQueue);
   configASSERT(xQueueCmd != NULL);
-  EVENT_BUS_CUSTOM_INIT;
+}
+
+TaskHandle_t eventBusProcessHandle(void) {
+  return processHandle;
 }
