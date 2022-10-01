@@ -96,7 +96,6 @@ static void prvSubscribeAdd(event_t *event, uint32_t newEventMask) {
         (retainedEvents[i]->flags & EVENT_BUS_FLAGS_RETAIN) &&
         event->callback != NULL) {
       event->callback(retainedEvents[i]);
-      break;
     }
   }
 }
@@ -133,7 +132,6 @@ static void prvSubscribeEvent(event_t *event) {
         (retainedEvents[i]->flags & EVENT_BUS_FLAGS_RETAIN) &&
         event->callback != NULL) {
       event->callback(retainedEvents[i]);
-      break;
     }
   }
 }
