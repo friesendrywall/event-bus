@@ -265,6 +265,6 @@ void initEventBus(void) {
   configASSERT(xQueueCmd != NULL);
 }
 
-TaskHandle_t eventBusProcessHandle(void) {
-  return processHandle;
+TaskHandle_t *eventBusProcessHandle(void) {
+  return &processHandle;
 }

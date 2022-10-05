@@ -33,7 +33,10 @@
 
 typedef struct {
   uint32_t event;
-  void *ptr;
+  union {
+    void *ptr;
+    uint32_t value;
+  };
   uint32_t flags;
   uint16_t len;
   uint16_t publisherId;
@@ -56,7 +59,6 @@ void subscribeEvent(event_t *event);
 void unSubscribeEvent(event_t *event);
 void publishEvent(event_params_t *event);
 void invalidateEvent(event_params_t *event);
-TaskHandle_t eventBusProcessHandle(void);
+TaskHandle_t *eventBusProcessHandle(void);
 
 #endif /* EVENTBUS_H */
-
