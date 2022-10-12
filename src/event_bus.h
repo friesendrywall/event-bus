@@ -38,9 +38,16 @@ typedef struct {
     uint32_t value;
   };
   uint32_t flags;
+  uint32_t params;
   uint16_t len;
   uint16_t publisherId;
 } event_params_t;
+
+typedef struct {
+  uint32_t event;
+  uint32_t params;
+  uint8_t data[];
+} event_msg_t;
 
 typedef void (*eventCallback)(event_params_t *);
 
