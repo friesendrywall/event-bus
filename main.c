@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "minunit.h"
 
 /* Kernel includes. */
 #include "event_bus.h"
@@ -34,96 +35,237 @@
 #include <semphr.h>
 #include <task.h>
 #include <timers.h>
+
+enum { EVENT_1, EVENT_2, EVENT_3, EVENT_4 };
+enum { CALLBACK_1, CALLBACK_2, CALLBACK_3, CALLBACK_4 };
+
 static StackType_t xStackTest[512];
 static StaticTask_t xTaskBufferTest;
-static uint32_t results[6];
+static uint32_t results[CALLBACK_4 + 1];
+static uint32_t eventResult[EVENT_BUS_BITS];
 
 void callback1(event_params_t *eventParams) {
-  results[1] = eventParams->len;
+  results[CALLBACK_1] = eventParams->value;
+  eventResult[eventParams->event] = eventParams->value;
   printf("callback1 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->len, eventParams->ptr);
+         eventParams->value, eventParams->ptr);
 }
 
 void callback2(event_params_t *eventParams) {
-  results[2] = eventParams->len;
+  results[CALLBACK_2] = eventParams->value;
+  eventResult[eventParams->event] = eventParams->value;
   printf("callback2 event(0x%X) %i (0x%p) %i\r\n", eventParams->event,
-         eventParams->len, eventParams->ptr, eventParams->publisherId);
+         eventParams->value, eventParams->ptr, eventParams->publisherId);
 }
 
 void callback3(event_params_t *eventParams) {
-  results[3] = eventParams->len;
+  results[CALLBACK_3] = eventParams->value;
+  eventResult[eventParams->event] = eventParams->value;
   printf("callback3 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->len, eventParams->ptr);
+         eventParams->value, eventParams->ptr);
 }
 
 void callback4(event_params_t *eventParams) {
-  results[4] = eventParams->len;
+  results[CALLBACK_4] = eventParams->value;
+  eventResult[eventParams->event] = eventParams->value;
   printf("callback4 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->len, eventParams->ptr);
+         eventParams->value, eventParams->ptr);
 }
 
-void callback5(event_params_t *eventParams) {
-  results[5] = eventParams->len;
-  printf("callback5 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->len, eventParams->ptr);
+event_t ev1 = {.callback = callback1};
+
+event_t ev2 = {.callback = callback2};
+
+event_t ev3 = {.callback = callback3};
+
+event_t ev4 = {.callback = callback4};
+
+int tests_run = 0;
+
+void test_setup(void) {
+  int i;
+  event_params_t t = {0};
+  for (i = EVENT_1; i < EVENT_4 + 1; i++) {
+    t.event = i;
+    invalidateEvent(&t);
+  }
+  memset(&results, 0, sizeof(results));
+  memset(&eventResult, 0, sizeof(eventResult));
+  detachBus(&ev1);
+  detachBus(&ev2);
+  detachBus(&ev3);
+  detachBus(&ev4);
+  memset(ev1.eventMask, 0, sizeof(ev1.eventMask));
+  memset(ev2.eventMask, 0, sizeof(ev2.eventMask));
+  memset(ev3.eventMask, 0, sizeof(ev3.eventMask));
+  memset(ev4.eventMask, 0, sizeof(ev4.eventMask));
 }
 
-event_t ev1 = {.eventMask = 0x01, .callback = callback1};
+static const char *test_pubSub(void) {
+  test_setup();
+  attachBus(&ev1);
+  subEvent(&ev1, EVENT_1);
+  publishEventQ(EVENT_1, 0xDEADBEEF);
+  mu_assert("error, pubSub != 0x1234", results[CALLBACK_1] == 0xDEADBEEF);
+  return NULL;
+}
 
-event_t ev2 = {.eventMask = 0x02, .callback = callback2};
+static const char *test_pubSubHighBits(void) {
+  test_setup();
+  attachBus(&ev1);
+  subEvent(&ev1, 80);
+  publishEventQ(80, 0xBEEF0BEE);
+  mu_assert("error, highBits != 0xBEEF0BEE", eventResult[80] == 0xBEEF0BEE);
+  return NULL;
+}
 
-event_t ev3 = {.eventMask = 0x04, .callback = callback3};
+static const char *test_pubSubRange(void) {
+  int i;
+  static char info[64];
+  test_setup();
+  attachBus(&ev1);
+  for (i = 0; i < EVENT_BUS_BITS; i++) {
+    subEvent(&ev1, i);
+  }
+  for (i = 0; i < EVENT_BUS_BITS; i++) {
+    publishEventQ(i, 0xAAAA0000 + i);
+    sprintf(info, "error, publish %i failed 0x%X != 0x%X", i,
+            eventResult[i] , 0xAAAA0000 + i);
+    mu_assert(info, eventResult[i] == 0xAAAA0000 + i);
+  }
+  return NULL;
+}
 
-event_t ev4 = {.eventMask = 0xFF, .callback = callback4};
+static const char* test_pubFromISR(void) {
+  event_params_t t = {.event = EVENT_1, .value = 0xBEEF};
+  test_setup();
+  attachBus(&ev1);
+  subEvent(&ev1, EVENT_1);
+  (void)publishEventFromISR(&t);
+  vTaskDelay(10);
+  mu_assert("error, retain results != 0xBEEF", results[CALLBACK_1] == 0xBEEF);
+  return NULL;
+}
+
+static const char *test_retain(void) {
+  test_setup();
+  event_params_t t = {.event = EVENT_1, .value = 0x1234};
+  attachBus(&ev1);
+  publishEvent(&t, true);
+  subEvent(&ev1, EVENT_1);
+  mu_assert("error, retain results != 0x1234", results[CALLBACK_1] == 0x1234);
+  return NULL;
+}
+
+static const char *test_invalidate(void) {
+  test_setup();
+  event_params_t t = {.event = EVENT_1, .value = 0x1234};
+  attachBus(&ev1);
+  publishEvent(&t, true);
+  invalidateEvent(&t);
+  subEvent(&ev1, EVENT_1);
+  mu_assert("error, Invalidate results != 0", results[CALLBACK_1] == 0);
+  return NULL;
+}
+
+static const char *test_subscribeArray(void) {
+  event_params_t t1 = {.event = EVENT_1, .value = 0xE1};
+  event_params_t t2 = {.event = EVENT_2, .value = 0xE2};
+  event_params_t t3 = {.event = EVENT_3, .value = 0xE3};
+  event_params_t t4 = {.event = EVENT_4, .value = 0xE4};
+  test_setup();
+  attachBus(&ev1);
+  uint32_t list[] = {EVENT_1, EVENT_2, EVENT_3, EVENT_4, EVENT_BUS_LAST_PARAM};
+  subEventList(&ev1, list);
+  publishEvent(&t1, false);
+  publishEvent(&t2, false);
+  publishEvent(&t3, false);
+  publishEvent(&t4, false);
+  mu_assert("error, event 1 != 0xE1", eventResult[EVENT_1] == 0xE1);
+  mu_assert("error, event 2 != 0xE2", eventResult[EVENT_2] == 0xE2);
+  mu_assert("error, event 3 != 0xE3", eventResult[EVENT_3] == 0xE3);
+  mu_assert("error, event 4 != 0xE4", eventResult[EVENT_4] == 0xE4);
+  return NULL;
+}
+
+static const char *test_detachBus(void) {
+  event_params_t t = {.event = EVENT_1, .value = 0x4321};
+  test_setup();
+  results[CALLBACK_1] = 0x1111;
+  attachBus(&ev1);
+  subEvent(&ev1, EVENT_1);
+  detachBus(&ev1);
+  publishEvent(&t, true);
+  mu_assert("error, detachBus failed", results[CALLBACK_1] == 0x1111);
+  return NULL;
+}
+
+static const char *test_filterRX(void) {
+  event_params_t t1 = {.event = EVENT_1, .value = 0xE1};
+  event_params_t t2 = {.event = EVENT_2, .value = 0xE2};
+  event_params_t t3 = {.event = EVENT_3, .value = 0xE3};
+  event_params_t t4 = {.event = EVENT_4, .value = 0xE4};
+  test_setup();
+  attachBus(&ev1);
+  uint32_t list[] = {EVENT_1,EVENT_4, EVENT_BUS_LAST_PARAM};
+  subEventList(&ev1, list);
+  publishEvent(&t1, false);
+  publishEvent(&t2, false);
+  publishEvent(&t3, false);
+  publishEvent(&t4, false);
+  mu_assert("error, filteredRX event 1 != 0xE1", eventResult[EVENT_1] == 0xE1);
+  mu_assert("error, filteredRX event 2 != 0x00", eventResult[EVENT_2] == 0x00);
+  mu_assert("error, filteredRX event 3 != 0x00", eventResult[EVENT_3] == 0x00);
+  mu_assert("error, filteredRX event 4 != 0xE4", eventResult[EVENT_4] == 0xE4);
+  return NULL;
+}
+
+static const char *test_multipleRX(void) {
+  event_params_t t1 = {.event = EVENT_1, .value = 0xAA};
+  test_setup();
+  attachBus(&ev1);
+  attachBus(&ev2);
+  attachBus(&ev3);
+  attachBus(&ev4);
+  uint32_t list[] = {EVENT_1, EVENT_4, EVENT_BUS_LAST_PARAM};
+  subEventList(&ev1, list);
+  subEventList(&ev2, list);
+  subEventList(&ev3, list);
+  subEvent(&ev4, EVENT_1);
+  publishEvent(&t1, false);
+  mu_assert("error, event 1 != 0xAA", results[CALLBACK_1] == 0xAA);
+  mu_assert("error, event 2 != 0xAA", results[CALLBACK_2] == 0xAA);
+  mu_assert("error, event 3 != 0xAA", results[CALLBACK_3] == 0xAA);
+  mu_assert("error, event 4 != 0xAA", results[CALLBACK_4] == 0xAA);
+  return NULL;
+}
+
+static char *all_tests() {
+  mu_run_test(test_pubSub);
+  mu_run_test(test_pubSubHighBits);
+  mu_run_test(test_pubSubRange);
+  mu_run_test(test_pubFromISR);
+  mu_run_test(test_retain);
+  mu_run_test(test_invalidate);
+  mu_run_test(test_subscribeArray);
+  mu_run_test(test_detachBus);
+  mu_run_test(test_filterRX);
+  mu_run_test(test_multipleRX);
+  return NULL;
+}
 
 static void TestTask(void *pvParameters) {
   static int i = 0;
   (void)pvParameters;
-  event_params_t t;
-  t.ptr = NULL;
-  t.event = 1UL;
-  t.len = 4;
-  t.flags = EVENT_BUS_FLAGS_RETAIN;
-  // Test retain
-  publishEvent(&t);
-  if (results[1]) {
-    printf("Test failed\r\n");
-    ExitProcess(EXIT_FAILURE);
+
+  char *result = all_tests();
+  if (result != NULL) {
+    printf("%s\n", result);
+  } else {
+    printf("ALL TESTS PASSED\n");
   }
-  subscribeEvent(&ev1);
-  if (results[1] != 4) {
-    printf("Test failed %i != %i\r\n", results[1], 4);
-    ExitProcess(EXIT_FAILURE);
-  }
-  printf("Passed Retain test\r\n");
-  // Test delete
-  results[1] = 0;
-  unSubscribeEvent(&ev1);
-  invalidateEvent(&t);
-  subscribeEvent(&ev1);
-  if (results[1] != 0) {
-    printf("Test failed %i != %i\r\n", results[1], 0);
-    ExitProcess(EXIT_FAILURE);
-  }
-  printf("Passed Invalidate test\r\n");
-  subscribeEvent(&ev1);
-  subscribeEvent(&ev2);
-  subscribeEvent(&ev3);
-  subscribeEvent(&ev4);
-  t.flags = 0;
-  t.len = 2;
-  t.event = 0x02;
-  t.publisherId = 5;
-  publishEvent(&t);
-  t.len = 4;
-  t.event = 0x08;
-  publishEvent(&t);
-  if (results[2] != 2 && results[4] != 4) {
-    printf("Test failed at core publish\r\n");
-    ExitProcess(EXIT_FAILURE);
-  }
-  printf("All tests passed\r\n");
-  ExitProcess(EXIT_FAILURE);
+  printf("Tests run: %d\n", tests_run);
+  ExitProcess(result != NULL);
 }
 
 /*

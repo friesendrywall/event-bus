@@ -115,6 +115,7 @@
   <ItemGroup>
     <ClInclude Include="event_bus_config.h" />
     <ClInclude Include="FreeRTOSConfig.h" />
+    <ClInclude Include="minunit.h" />
     <ClInclude Include="src\event_bus.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

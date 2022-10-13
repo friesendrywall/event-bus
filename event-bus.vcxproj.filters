@@ -68,5 +68,8 @@
     <ClInclude Include="src\event_bus.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="minunit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
