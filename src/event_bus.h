@@ -32,9 +32,13 @@
 #include <stdbool.h>
 #include <stdarg.h>
 
+#include "event_bus_config.h"
 #include <FreeRTOS.h>
 #include <task.h>
-#include "event_bus_config.h"
+
+#ifndef EVENT_BUS_MASK_WIDTH
+#error EVENT_BUS_MASK_WIDTH must be declared in config file
+#endif
 
 typedef struct {
   uint32_t event;
@@ -58,9 +62,9 @@ struct EVENT_T {
 };
 typedef struct EVENT_T event_t;
 
-TaskHandle_t *initEventBus(void);
+TaskHandle_t initEventBus(void);
 void subEvent(event_t *event, uint32_t eventId);
-void subEventList(event_t *event, uint32_t *eventList);
+void subEventList(event_t *event, const uint32_t *eventList);
 void unSubEvent(event_t *event, uint32_t eventId);
 void attachBus(event_t *event);
 void detachBus(event_t *event);

@@ -202,7 +202,7 @@ void subEvent(event_t *event, uint32_t eventId) {
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
 
-void subEventList(event_t *event, uint32_t *eventList) {
+void subEventList(event_t *event, const uint32_t *eventList) {
   configASSERT(event);
   configASSERT(eventList);
   EVENT_CMD cmd = {.command = CMD_SUBSCRIBE_ADD_ARRAY,
@@ -275,12 +275,12 @@ void invalidateEvent(event_params_t *event) {
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
 
-TaskHandle_t *initEventBus(void) {
+TaskHandle_t initEventBus(void) {
   static TaskHandle_t processHandle = NULL;
   processHandle =
       xTaskCreateStatic(eventBusTasks, "Event-Bus", STACK_SIZE, NULL,
                         (configMAX_PRIORITIES - 2), xStack, &xTaskBuffer);
   xQueueCmd = xQueueCreateStatic(EVENT_BUS_MAX_CMD_QUEUE, sizeof(EVENT_CMD),
                                  ucQueueStorage, &xStaticQueue);
-  return &processHandle;
+  return processHandle;
 }
