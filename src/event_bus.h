@@ -42,12 +42,10 @@
 
 typedef struct {
   uint32_t event;
-
   union {
     void *ptr;
     uint32_t value;
   };
-  uint32_t params;
   uint16_t len;
   uint16_t publisherId;
 } event_params_t;
