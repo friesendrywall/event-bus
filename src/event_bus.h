@@ -42,12 +42,12 @@
 
 typedef struct {
   uint32_t event;
+  uint16_t publisherId;
+  uint16_t len;
   union {
     void *ptr;
     uint32_t value;
-  };
-  uint16_t len;
-  uint16_t publisherId;
+  }; 
 } event_params_t;
 
 typedef void (*eventCallback)(event_params_t *);
@@ -58,14 +58,14 @@ struct EVENT_T {
   struct EVENT_T *prev;
   struct EVENT_T *next;
 };
-typedef struct EVENT_T event_t;
+typedef struct EVENT_T event_listener_t;
 
 TaskHandle_t initEventBus(void);
-void subEvent(event_t *event, uint32_t eventId);
-void subEventList(event_t *event, const uint32_t *eventList);
-void unSubEvent(event_t *event, uint32_t eventId);
-void attachBus(event_t *event);
-void detachBus(event_t *event);
+void subEvent(event_listener_t *event, uint32_t eventId);
+void subEventList(event_listener_t *event, const uint32_t *eventList);
+void unSubEvent(event_listener_t *event, uint32_t eventId);
+void attachBus(event_listener_t *event);
+void detachBus(event_listener_t *event);
 void publishEvent(event_params_t *event, bool retain);
 BaseType_t publishEventFromISR(event_params_t *event);
 void publishEventQ(uint32_t event, uint32_t value);

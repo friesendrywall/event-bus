@@ -72,13 +72,13 @@ void callback4(event_params_t *eventParams) {
          eventParams->value, eventParams->ptr);
 }
 
-event_t ev1 = {.callback = callback1};
+event_listener_t ev1 = {.callback = callback1};
 
-event_t ev2 = {.callback = callback2};
+event_listener_t ev2 = {.callback = callback2};
 
-event_t ev3 = {.callback = callback3};
+event_listener_t ev3 = {.callback = callback3};
 
-event_t ev4 = {.callback = callback4};
+event_listener_t ev4 = {.callback = callback4};
 
 int tests_run = 0;
 
@@ -240,7 +240,7 @@ static const char *test_multipleRX(void) {
   return NULL;
 }
 
-static char *all_tests() {
+static const char *all_tests() {
   mu_run_test(test_pubSub);
   mu_run_test(test_pubSubHighBits);
   mu_run_test(test_pubSubRange);
@@ -258,7 +258,7 @@ static void TestTask(void *pvParameters) {
   static int i = 0;
   (void)pvParameters;
 
-  char *result = all_tests();
+  const char *result = all_tests();
   if (result != NULL) {
     printf("%s\n", result);
   } else {
