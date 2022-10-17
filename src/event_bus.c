@@ -64,6 +64,21 @@ static StaticQueue_t xStaticQueue;
 static uint8_t ucQueueStorage[EVENT_BUS_MAX_CMD_QUEUE * sizeof(EVENT_CMD)];
 static QueueHandle_t xQueueCmd = NULL;
 
+static inline void prvSendEvent(event_listener_t *listener,
+                                event_msg_t *eventParams) {
+  if (listener->callback != NULL) {
+    listener->callback(eventParams);
+  } else if (listener->queueHandle != NULL) {
+    if (xQueueSendToBackFromISR(listener->queueHandle, (void *)eventParams,
+                                NULL) != pdTRUE) {
+      listener->errFull = 1;
+      EVENT_BUS_DEBUG_QUEUE_FULL;
+    }
+  } else if (listener->waitingTask != NULL) {
+    xTaskNotifyGive(listener->waitingTask);
+  }
+}
+
 static void prvPublishEvent(event_msg_t *eventParams, bool retain) {
   configASSERT(eventParams);
   configASSERT(eventParams->event < EVENT_BUS_BITS);
@@ -77,16 +92,7 @@ static void prvPublishEvent(event_msg_t *eventParams, bool retain) {
   while (ev != NULL) {
     if ((ev->eventMask[eventParams->event / 32] &
          (1UL << (eventParams->event % 32)))) {
-      if (ev->callback != NULL) {
-        ev->callback(eventParams);
-      }
-      if (ev->queueHandle != NULL) {
-        if (xQueueSendToBackFromISR(ev->queueHandle, (void *)eventParams,
-                                    NULL) != pdTRUE) {
-          ev->errFull = 1;
-          EVENT_BUS_DEBUG_QUEUE_FULL;
-        }
-      }
+      prvSendEvent(ev, eventParams);
     }
     ev = ev->next;
   }
@@ -97,17 +103,7 @@ static void prvSubscribeAdd(event_listener_t *listener, uint32_t newEvent) {
   listener->eventMask[newEvent / 32] |= (1UL << (newEvent % 32));
   /* Search for any retained events */
   if (retainedEvents[newEvent]) {
-    if (listener->callback != NULL) {
-      listener->callback(retainedEvents[newEvent]);
-    }
-    if (listener->queueHandle != NULL) {
-      if (xQueueSendToBackFromISR(listener->queueHandle,
-                                  (void *)&retainedEvents[newEvent],
-                                  NULL) != pdTRUE) {
-        listener->errFull = 1;
-        EVENT_BUS_DEBUG_QUEUE_FULL;
-      }
-    }
+    prvSendEvent(listener, retainedEvents[newEvent]);
   }
 }
 
@@ -342,6 +338,22 @@ void invalidateEvent(event_msg_t *event) {
   taskYIELD();
 #endif
 }
+
+#ifdef EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
+BaseType_t waitEvent(uint32_t event, uint32_t waitTicks) {
+  event_listener_t listener = {0};
+  listener.waitingTask = xTaskGetCurrentTaskHandle();
+  attachBus(&listener);
+  subEvent(&listener, event);
+  uint32_t ret = ulTaskNotifyTake(pdTRUE, waitTicks);
+  detachBus(&listener);
+  if (ret == 0) {
+    /* Make sure we didn't get one from a race cond */
+    ret = ulTaskNotifyTake(pdTRUE, 0);
+  }
+  return ret == 1 ? pdPASS : pdFAIL;
+}
+#endif
 
 TaskHandle_t initEventBus(void) {
   static TaskHandle_t processHandle = NULL;

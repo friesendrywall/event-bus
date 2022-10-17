@@ -250,6 +250,32 @@ void vTimerCallback(TimerHandle_t xTimer) {
   publishEvent(&t1, false);
 }
 
+static const char *test_waitEvent(void) {
+  static TimerHandle_t xTimer;
+  static StaticTimer_t xTimerBuffer;
+  xTimer = xTimerCreateStatic("Timer", 250 / portTICK_PERIOD_MS, pdFALSE,
+                              (void *)0, vTimerCallback, &xTimerBuffer);
+  test_setup();
+  xTimerStart(xTimer, 0);
+  mu_assert("error, event wait != pdPASS",
+            waitEvent(EVENT_1, 1000 / portTICK_PERIOD_MS) == pdPASS);
+  xTimerStop(xTimer, 0);
+  return NULL;
+}
+
+static const char *test_waitEventFail(void) {
+  static TimerHandle_t xTimer;
+  static StaticTimer_t xTimerBuffer;
+  xTimer = xTimerCreateStatic("Timer", 250 / portTICK_PERIOD_MS, pdFALSE,
+                              (void *)0, vTimerCallback, &xTimerBuffer);
+  test_setup();
+  xTimerStart(xTimer, 0);
+  mu_assert("error, event wait != pdFAIL",
+            waitEvent(EVENT_2, 1000 / portTICK_PERIOD_MS) == pdFAIL);
+  xTimerStop(xTimer, 0);
+  return NULL;
+}
+
 static const char *test_queueRX(void) {
   static TimerHandle_t xTimer;
   static StaticTimer_t xTimerBuffer;
@@ -265,6 +291,7 @@ static const char *test_queueRX(void) {
   subEventList(&ev1, list);
   xTimerStart(xTimer, 0);
   BaseType_t result = xQueueReceive(xQueueTest, &rx, 5000 / portTICK_PERIOD_MS);
+  xTimerStop(xTimer, 0);
   mu_assert("error, queued event != 0xCC", rx.value == 0xCC);
   return NULL;
 }
@@ -280,6 +307,8 @@ static const char *all_tests() {
   mu_run_test(test_detachBus);
   mu_run_test(test_filterRX);
   mu_run_test(test_multipleRX);
+  mu_run_test(test_waitEvent);
+  mu_run_test(test_waitEventFail);
   mu_run_test(test_queueRX);
   return NULL;
 }

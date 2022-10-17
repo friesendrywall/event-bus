@@ -37,8 +37,17 @@
 #include <queue.h>
 #include <task.h>
 
+#ifndef EVENT_BUS_RTOS_PRIORITY
+#define EVENT_BUS_RTOS_PRIORITY (configMAX_PRIORITIES - 2)
+#endif
+
 #ifndef EVENT_BUS_MASK_WIDTH
 #error EVENT_BUS_MASK_WIDTH must be declared in config file
+#endif
+
+#if (EVENT_BUS_USE_TASK_NOTIFICATION_INDEX + 1) >                             \
+    configTASK_NOTIFICATION_ARRAY_ENTRIES
+#error configTASK_NOTIFICATION_ARRAY_ENTRIES must be greater than EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
 #endif
 
 typedef struct {
@@ -59,6 +68,7 @@ struct EVENT_T {
   uint32_t errFull : 1;
   eventCallback callback;
   QueueHandle_t queueHandle;
+  TaskHandle_t waitingTask;
   struct EVENT_T *prev;
   struct EVENT_T *next;
 };
@@ -74,5 +84,8 @@ void publishEvent(event_msg_t *event, bool retain);
 BaseType_t publishEventFromISR(event_msg_t *event);
 void publishEventQ(uint32_t event, uint32_t value);
 void invalidateEvent(event_msg_t *event);
+#ifdef EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
+BaseType_t waitEvent(uint32_t event, uint32_t waitTicks);
+#endif
 
 #endif /* EVENTBUS_H */
