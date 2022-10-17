@@ -1,6 +1,9 @@
 # event-bus
 Smallish event bus for FreeRTOS
 
-Supports bitmasked events on uint32_t.
+Uses high priority thread to send messages.  
 
-Build with Visual Studio 2019 or greater.
+set EVENT_BUS_MASK_WIDTH to desired max event count, for example 3 would be 3 * 32
+total messages. 
+
+Test Build with Visual Studio 2019 or greater.

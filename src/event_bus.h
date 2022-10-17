@@ -34,6 +34,7 @@
 
 #include "event_bus_config.h"
 #include <FreeRTOS.h>
+#include <queue.h>
 #include <task.h>
 
 #ifndef EVENT_BUS_MASK_WIDTH
@@ -42,33 +43,36 @@
 
 typedef struct {
   uint32_t event;
+  uint32_t params; /* for externally shared queue */
   uint16_t publisherId;
   uint16_t len;
   union {
     void *ptr;
     uint32_t value;
   }; 
-} event_params_t;
+} event_msg_t;
 
-typedef void (*eventCallback)(event_params_t *);
+typedef void (*eventCallback)(event_msg_t *);
 
 struct EVENT_T {
   uint32_t eventMask[EVENT_BUS_MASK_WIDTH];
+  uint32_t errFull : 1;
   eventCallback callback;
+  QueueHandle_t queueHandle;
   struct EVENT_T *prev;
   struct EVENT_T *next;
 };
 typedef struct EVENT_T event_listener_t;
 
 TaskHandle_t initEventBus(void);
-void subEvent(event_listener_t *event, uint32_t eventId);
-void subEventList(event_listener_t *event, const uint32_t *eventList);
-void unSubEvent(event_listener_t *event, uint32_t eventId);
-void attachBus(event_listener_t *event);
-void detachBus(event_listener_t *event);
-void publishEvent(event_params_t *event, bool retain);
-BaseType_t publishEventFromISR(event_params_t *event);
+void subEvent(event_listener_t *listener, uint32_t eventId);
+void subEventList(event_listener_t *listener, const uint32_t *eventList);
+void unSubEvent(event_listener_t *listener, uint32_t eventId);
+void attachBus(event_listener_t *listener);
+void detachBus(event_listener_t *listener);
+void publishEvent(event_msg_t *event, bool retain);
+BaseType_t publishEventFromISR(event_msg_t *event);
 void publishEventQ(uint32_t event, uint32_t value);
-void invalidateEvent(event_params_t *event);
+void invalidateEvent(event_msg_t *event);
 
 #endif /* EVENTBUS_H */
