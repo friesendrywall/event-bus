@@ -56,9 +56,12 @@ typedef struct {
   uint16_t publisherId;
   uint16_t len;
   union {
+#ifdef EVENT_BUS_CUSTOM_VALUE_TYPES
+    EVENT_BUS_CUSTOM_VALUE_TYPES;
+#endif
     void *ptr;
     uint32_t value;
-  }; 
+  };
 } event_msg_t;
 
 typedef void (*eventCallback)(event_msg_t *);
