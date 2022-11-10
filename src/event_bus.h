@@ -72,6 +72,7 @@ struct EVENT_T {
   eventCallback callback;
   QueueHandle_t queueHandle;
   TaskHandle_t waitingTask;
+  const char * name;
   struct EVENT_T *prev;
   struct EVENT_T *next;
 };

@@ -69,10 +69,9 @@ static inline void prvSendEvent(event_listener_t *listener,
   if (listener->callback != NULL) {
     listener->callback(eventParams);
   } else if (listener->queueHandle != NULL) {
-    if (xQueueSendToBackFromISR(listener->queueHandle, (void *)eventParams,
-                                NULL) != pdTRUE) {
+    if (xQueueSendToBackFromISR(listener->queueHandle, (void *)eventParams, NULL) != pdTRUE) {
       listener->errFull = 1;
-      EVENT_BUS_DEBUG_QUEUE_FULL;
+      EVENT_BUS_DEBUG_QUEUE_FULL(listener->name);
     }
   } else if (listener->waitingTask != NULL) {
     xTaskNotifyGive(listener->waitingTask);
