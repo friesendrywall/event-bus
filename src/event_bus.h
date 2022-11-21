@@ -47,7 +47,8 @@
 
 #if (EVENT_BUS_USE_TASK_NOTIFICATION_INDEX + 1) >                             \
     configTASK_NOTIFICATION_ARRAY_ENTRIES
-#error configTASK_NOTIFICATION_ARRAY_ENTRIES must be greater than EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
+#error configTASK_NOTIFICATION_ARRAY_ENTRIES must be greater than \
+    EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
 #endif
 
 typedef struct {
