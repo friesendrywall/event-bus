@@ -320,10 +320,8 @@ static const char *test_queueRX(void) {
 }
 
 void vTimerAllocatedCallback(TimerHandle_t xTimer) {
-  event_value_t *tx = eventAlloc(sizeof(event_value_t));
+  event_value_t *tx = eventAlloc(sizeof(event_value_t), EVENT_1, 0);
   configASSERT(tx != NULL);
-  tx->e.event = EVENT_1;
-  tx->e.publisherId = 0;
   tx->value = 0xB0;
   publishEvent(&tx->e, false);
 }
@@ -333,7 +331,7 @@ static const char *test_AllocatedEvent(void) {
   static StaticTimer_t xTimerBuffer;
   xTimer = xTimerCreateStatic("Timer", 250 / portTICK_PERIOD_MS, pdFALSE, (void *)0,
                          vTimerAllocatedCallback, &xTimerBuffer);
-  event_value_t *empty = threadEventAlloc(sizeof(event_value_t));
+  event_value_t *empty = threadEventAlloc(sizeof(event_value_t), 0, 0);
   test_setup();
   event_value_t *rx;
   event_value_t *rx2;

@@ -367,7 +367,8 @@ TaskHandle_t initEventBus(void) {
   return processHandle;
 }
 
-static void *prvEventAlloc(size_t size, uint16_t refCount) {
+static void *prvEventAlloc(size_t size, uint32_t eventId, uint16_t publisherId,
+                           uint16_t refCount) {
   event_msg_t *val;
   configASSERT(size >= sizeof(event_msg_t));
   configASSERT(size <= POOL_SIZE_CALC(EVENT_BUS_POOL_LG_SZ));
@@ -381,19 +382,21 @@ static void *prvEventAlloc(size_t size, uint16_t refCount) {
     val->lg = size > POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ);
     val->dynamicAlloc = 1;
     val->refCount = refCount;
+    val->event = eventId;
+    val->publisherId = publisherId;
   }
   xTaskResumeAll();
   return (void *)val;
 }
 
-void *eventAlloc(size_t size) {
+void *eventAlloc(size_t size, uint32_t eventId, uint16_t publisherId) {
   /* Zero ref count */
-  return prvEventAlloc(size, 0);
+  return prvEventAlloc(size, eventId, publisherId, 0);
 }
 
-void *threadEventAlloc(size_t size) {
+void *threadEventAlloc(size_t size, uint32_t eventId, uint16_t publisherId) {
   /* Single ref count */
-  return prvEventAlloc(size, 1);
+  return prvEventAlloc(size, eventId, publisherId, 1);
 }
 
 void eventRelease(void *event) {
