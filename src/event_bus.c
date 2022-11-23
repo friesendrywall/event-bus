@@ -296,9 +296,9 @@ void detachBus(event_listener_t *listener) {
 #endif
 }
 
-void publishEvent(event_msg_t *event, bool retain) {
+void publishEvent(void *event, bool retain) {
   configASSERT(event);
-  configASSERT(event->event < EVENT_BUS_BITS);
+  configASSERT(((event_msg_t *)event)->event < EVENT_BUS_BITS);
   EVENT_CMD cmd = {
       .command = CMD_NEW_EVENT, .eventData = event, .params = retain};
   cmd.xCallingTask = xTaskGetCurrentTaskHandle();
@@ -311,16 +311,16 @@ void publishEvent(event_msg_t *event, bool retain) {
 #endif
 }
 
-BaseType_t publishEventFromISR(event_msg_t *event) {
+BaseType_t publishEventFromISR(void *event) {
   configASSERT(event);
-  configASSERT(event->event < EVENT_BUS_BITS);
+  configASSERT(((event_msg_t *)event)->event < EVENT_BUS_BITS);
   EVENT_CMD cmd = {
       .command = CMD_NEW_EVENT, .eventData = event, .params = 0};
   cmd.xCallingTask = NULL;
   return xQueueSendToBackFromISR(xQueueCmd, (void *)&cmd, NULL) == pdTRUE;
 }
 
-void invalidateEvent(event_msg_t *event) {
+void invalidateEvent(void *event) {
   configASSERT(event);
   EVENT_CMD cmd = {.command = CMD_INVALIDATE_EVENT, .eventData = event};
   cmd.xCallingTask = xTaskGetCurrentTaskHandle();

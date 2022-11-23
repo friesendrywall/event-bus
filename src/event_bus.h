@@ -81,9 +81,9 @@ void subEventList(event_listener_t *listener, const uint32_t *eventList);
 void unSubEvent(event_listener_t *listener, uint32_t eventId);
 void attachBus(event_listener_t *listener);
 void detachBus(event_listener_t *listener);
-void publishEvent(event_msg_t *event, bool retain);
-BaseType_t publishEventFromISR(event_msg_t *event);
-void invalidateEvent(event_msg_t *event);
+void publishEvent(void *event, bool retain);
+BaseType_t publishEventFromISR(void *event);
+void invalidateEvent(void *event);
 #ifdef EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
 BaseType_t waitEvent(uint32_t event, uint32_t waitTicks);
 #endif
