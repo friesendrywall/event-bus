@@ -38,8 +38,12 @@
 
 #define CMD_QUEUE_SIZE 4
 static StaticQueue_t xStaticQueue;
-static uint8_t ucQueueStorage[CMD_QUEUE_SIZE * sizeof(event_msg_t)];
+static uint8_t ucQueueStorage[CMD_QUEUE_SIZE * sizeof(void *)];
 static QueueHandle_t xQueueTest = NULL;
+
+static StaticQueue_t xStaticQueue2;
+static uint8_t ucQueueStorage2[CMD_QUEUE_SIZE * sizeof(void *)];
+static QueueHandle_t xQueueTest2 = NULL;
 
 enum { EVENT_1, EVENT_2, EVENT_3, EVENT_4 };
 enum { CALLBACK_1, CALLBACK_2, CALLBACK_3, CALLBACK_4 };
@@ -49,32 +53,49 @@ static StaticTask_t xTaskBufferTest;
 static uint32_t results[CALLBACK_4 + 1];
 static uint32_t eventResult[EVENT_BUS_BITS];
 
+typedef struct {
+  event_msg_t e;
+  uint32_t value;
+} event_value_t;
+
+void publishEventQ(uint32_t event, uint32_t value) {
+  static event_value_t newEvent = {0};
+  configASSERT(event < EVENT_BUS_BITS);
+  newEvent.e.event = event;
+  newEvent.value = value;
+  publishEvent(&newEvent.e, false);
+}
+
 void callback1(event_msg_t *eventParams) {
-  results[CALLBACK_1] = eventParams->value;
-  eventResult[eventParams->event] = eventParams->value;
-  printf("callback1 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->value, eventParams->ptr);
+  event_value_t *val = (event_value_t *)eventParams;
+  results[CALLBACK_1] = val->value;
+  eventResult[val->e.event] = val->value;
+  printf("callback1 event(0x%X) %i (0x%p)\r\n", val->e.event, val->value,
+         eventParams);
 }
 
 void callback2(event_msg_t *eventParams) {
-  results[CALLBACK_2] = eventParams->value;
-  eventResult[eventParams->event] = eventParams->value;
-  printf("callback2 event(0x%X) %i (0x%p) %i\r\n", eventParams->event,
-         eventParams->value, eventParams->ptr, eventParams->publisherId);
+  event_value_t *val = (event_value_t *)eventParams;
+  results[CALLBACK_2] = val->value;
+  eventResult[val->e.event] = val->value;
+  printf("callback2 event(0x%X) %i (0x%p) %i\r\n", val->e.event,
+         val->value, eventParams, val->e.publisherId);
 }
 
 void callback3(event_msg_t *eventParams) {
-  results[CALLBACK_3] = eventParams->value;
-  eventResult[eventParams->event] = eventParams->value;
-  printf("callback3 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->value, eventParams->ptr);
+  event_value_t *val = (event_value_t *)eventParams;
+  results[CALLBACK_3] = val->value;
+  eventResult[val->e.event] = val->value;
+  printf("callback3 event(0x%X) %i (0x%p)\r\n", val->e.event, val->value,
+         eventParams);
 }
 
 void callback4(event_msg_t *eventParams) {
-  results[CALLBACK_4] = eventParams->value;
-  eventResult[eventParams->event] = eventParams->value;
-  printf("callback4 event(0x%X) %i (0x%p)\r\n", eventParams->event,
-         eventParams->value, eventParams->ptr);
+  event_value_t *val = (event_value_t *)eventParams;
+  results[CALLBACK_4] = val->value;
+  eventResult[val->e.event] = val->value;
+  printf("callback4 event(0x%X) %i (0x%p)\r\n", val->e.event, val->value,
+         eventParams);
 }
 
 event_listener_t ev1 = {.callback = callback1};
@@ -89,10 +110,10 @@ int tests_run = 0;
 
 void test_setup(void) {
   int i;
-  event_msg_t t = {0};
+  event_value_t t = {0};
   for (i = EVENT_1; i < EVENT_4 + 1; i++) {
-    t.event = i;
-    invalidateEvent(&t);
+    t.e.event = i;
+    invalidateEvent(&t.e);
   }
   memset(&results, 0, sizeof(results));
   memset(&eventResult, 0, sizeof(eventResult));
@@ -141,12 +162,12 @@ static const char *test_pubSubRange(void) {
   return NULL;
 }
 
-static const char* test_pubFromISR(void) {
-  event_msg_t t = {.event = EVENT_1, .value = 0xBEEF};
+static const char *test_pubFromISR(void) {
+  event_value_t t = {.e = {.event = EVENT_1}, .value = 0xBEEF};
   test_setup();
   attachBus(&ev1);
   subEvent(&ev1, EVENT_1);
-  (void)publishEventFromISR(&t);
+  (void)publishEventFromISR(&t.e);
   vTaskDelay(10);
   mu_assert("error, retain results != 0xBEEF", results[CALLBACK_1] == 0xBEEF);
   return NULL;
@@ -154,9 +175,9 @@ static const char* test_pubFromISR(void) {
 
 static const char *test_retain(void) {
   test_setup();
-  event_msg_t t = {.event = EVENT_1, .value = 0x1234};
+  event_value_t t = {.e = {.event = EVENT_1}, .value = 0x1234};
   attachBus(&ev1);
-  publishEvent(&t, true);
+  publishEvent(&t.e, true);
   subEvent(&ev1, EVENT_1);
   mu_assert("error, retain results != 0x1234", results[CALLBACK_1] == 0x1234);
   return NULL;
@@ -164,28 +185,28 @@ static const char *test_retain(void) {
 
 static const char *test_invalidate(void) {
   test_setup();
-  event_msg_t t = {.event = EVENT_1, .value = 0x1234};
+  event_value_t t = {.e = {.event = EVENT_1}, .value = 0x1234};
   attachBus(&ev1);
-  publishEvent(&t, true);
-  invalidateEvent(&t);
+  publishEvent(&t.e, true);
+  invalidateEvent(&t.e);
   subEvent(&ev1, EVENT_1);
   mu_assert("error, Invalidate results != 0", results[CALLBACK_1] == 0);
   return NULL;
 }
 
 static const char *test_subscribeArray(void) {
-  event_msg_t t1 = {.event = EVENT_1, .value = 0xE1};
-  event_msg_t t2 = {.event = EVENT_2, .value = 0xE2};
-  event_msg_t t3 = {.event = EVENT_3, .value = 0xE3};
-  event_msg_t t4 = {.event = EVENT_4, .value = 0xE4};
+  event_value_t t1 = {.e = {.event = EVENT_1}, .value = 0xE1};
+  event_value_t t2 = {.e = {.event = EVENT_2}, .value = 0xE2};
+  event_value_t t3 = {.e = {.event = EVENT_3}, .value = 0xE3};
+  event_value_t t4 = {.e = {.event = EVENT_4}, .value = 0xE4};
   test_setup();
   attachBus(&ev1);
   uint32_t list[] = {EVENT_1, EVENT_2, EVENT_3, EVENT_4, EVENT_BUS_LAST_PARAM};
   subEventList(&ev1, list);
-  publishEvent(&t1, false);
-  publishEvent(&t2, false);
-  publishEvent(&t3, false);
-  publishEvent(&t4, false);
+  publishEvent(&t1.e, false);
+  publishEvent(&t2.e, false);
+  publishEvent(&t3.e, false);
+  publishEvent(&t4.e, false);
   mu_assert("error, event 1 != 0xE1", eventResult[EVENT_1] == 0xE1);
   mu_assert("error, event 2 != 0xE2", eventResult[EVENT_2] == 0xE2);
   mu_assert("error, event 3 != 0xE3", eventResult[EVENT_3] == 0xE3);
@@ -194,30 +215,30 @@ static const char *test_subscribeArray(void) {
 }
 
 static const char *test_detachBus(void) {
-  event_msg_t t = {.event = EVENT_1, .value = 0x4321};
+  event_value_t t = {.e = {.event = EVENT_1}, .value = 0x4321};
   test_setup();
   results[CALLBACK_1] = 0x1111;
   attachBus(&ev1);
   subEvent(&ev1, EVENT_1);
   detachBus(&ev1);
-  publishEvent(&t, true);
+  publishEvent(&t.e, true);
   mu_assert("error, detachBus failed", results[CALLBACK_1] == 0x1111);
   return NULL;
 }
 
 static const char *test_filterRX(void) {
-  event_msg_t t1 = {.event = EVENT_1, .value = 0xE1};
-  event_msg_t t2 = {.event = EVENT_2, .value = 0xE2};
-  event_msg_t t3 = {.event = EVENT_3, .value = 0xE3};
-  event_msg_t t4 = {.event = EVENT_4, .value = 0xE4};
+  event_value_t t1 = {.e = {.event = EVENT_1}, .value = 0xE1};
+  event_value_t t2 = {.e = {.event = EVENT_2}, .value = 0xE2};
+  event_value_t t3 = {.e = {.event = EVENT_3}, .value = 0xE3};
+  event_value_t t4 = {.e = {.event = EVENT_4}, .value = 0xE4};
   test_setup();
   attachBus(&ev1);
   uint32_t list[] = {EVENT_1,EVENT_4, EVENT_BUS_LAST_PARAM};
   subEventList(&ev1, list);
-  publishEvent(&t1, false);
-  publishEvent(&t2, false);
-  publishEvent(&t3, false);
-  publishEvent(&t4, false);
+  publishEvent(&t1.e, false);
+  publishEvent(&t2.e, false);
+  publishEvent(&t3.e, false);
+  publishEvent(&t4.e, false);
   mu_assert("error, filteredRX event 1 != 0xE1", eventResult[EVENT_1] == 0xE1);
   mu_assert("error, filteredRX event 2 != 0x00", eventResult[EVENT_2] == 0x00);
   mu_assert("error, filteredRX event 3 != 0x00", eventResult[EVENT_3] == 0x00);
@@ -226,7 +247,7 @@ static const char *test_filterRX(void) {
 }
 
 static const char *test_multipleRX(void) {
-  event_msg_t t1 = {.event = EVENT_1, .value = 0xAA};
+  event_value_t t1 = {.e = {.event = EVENT_1}, .value = 0xAA};
   test_setup();
   attachBus(&ev1);
   attachBus(&ev2);
@@ -237,7 +258,7 @@ static const char *test_multipleRX(void) {
   subEventList(&ev2, list);
   subEventList(&ev3, list);
   subEvent(&ev4, EVENT_1);
-  publishEvent(&t1, false);
+  publishEvent(&t1.e, false);
   mu_assert("error, event 1 != 0xAA", results[CALLBACK_1] == 0xAA);
   mu_assert("error, event 2 != 0xAA", results[CALLBACK_2] == 0xAA);
   mu_assert("error, event 3 != 0xAA", results[CALLBACK_3] == 0xAA);
@@ -246,8 +267,8 @@ static const char *test_multipleRX(void) {
 }
 
 void vTimerCallback(TimerHandle_t xTimer) {
-  static event_msg_t t1 = {.event = EVENT_1, .value = 0xCC};
-  publishEvent(&t1, false);
+  static event_value_t t1 = {.e = {.event = EVENT_1}, .value = 0xCC};
+  publishEvent(&t1.e, false);
 }
 
 static const char *test_waitEvent(void) {
@@ -282,7 +303,7 @@ static const char *test_queueRX(void) {
   xTimer = xTimerCreateStatic("Timer", 250 / portTICK_PERIOD_MS, pdFALSE,
                               (void *)0, vTimerCallback, &xTimerBuffer);
 
-  event_msg_t rx;
+  event_value_t * rx;
   test_setup();
   ev1.callback = NULL;
   ev1.queueHandle = xQueueTest;
@@ -292,7 +313,51 @@ static const char *test_queueRX(void) {
   xTimerStart(xTimer, 0);
   BaseType_t result = xQueueReceive(xQueueTest, &rx, 5000 / portTICK_PERIOD_MS);
   xTimerStop(xTimer, 0);
-  mu_assert("error, queued event != 0xCC", rx.value == 0xCC);
+  unSubEvent(&ev1, EVENT_1);
+  unSubEvent(&ev1, EVENT_4);
+  mu_assert("error, queued event != 0xCC", rx->value == 0xCC);
+  return NULL;
+}
+
+void vTimerAllocatedCallback(TimerHandle_t xTimer) {
+  event_value_t *tx = eventAlloc(sizeof(event_value_t));
+  configASSERT(tx != NULL);
+  tx->e.event = EVENT_1;
+  tx->e.publisherId = 0;
+  tx->value = 0xB0;
+  publishEvent(&tx->e, false);
+}
+
+static const char *test_AllocatedEvent(void) {
+  static TimerHandle_t xTimer;
+  static StaticTimer_t xTimerBuffer;
+  xTimer = xTimerCreateStatic("Timer", 250 / portTICK_PERIOD_MS, pdFALSE, (void *)0,
+                         vTimerAllocatedCallback, &xTimerBuffer);
+  event_value_t *empty = threadEventAlloc(sizeof(event_value_t));
+  test_setup();
+  event_value_t *rx;
+  event_value_t *rx2;
+  ev1.callback = NULL;
+  ev1.queueHandle = xQueueTest;
+  attachBus(&ev1);
+  ev2.callback = NULL;
+  ev2.queueHandle = xQueueTest2;
+  attachBus(&ev2);
+  uint32_t list[] = {EVENT_1, EVENT_4, EVENT_BUS_LAST_PARAM};
+  subEventList(&ev1, list);
+  subEventList(&ev2, list);
+  xTimerStart(xTimer, 0);
+  BaseType_t result1 =
+      xQueueReceive(xQueueTest, &rx, 5000 / portTICK_PERIOD_MS);
+  BaseType_t result2 =
+      xQueueReceive(xQueueTest2, &rx2, 5000 / portTICK_PERIOD_MS);
+  xTimerStop(xTimer, 0);
+  mu_assert("error, Allocated event 1 != 0xB0", rx->value == 0xB0);
+  mu_assert("error, Allocated event 2 != 0xB0", rx->value == 0xB0);
+  eventRelease(rx);
+  mu_assert("error, RefCount != 1", rx->e.refCount == 1);
+  eventRelease(rx);
+  eventRelease(empty);
   return NULL;
 }
 
@@ -310,6 +375,7 @@ static const char *all_tests() {
   mu_run_test(test_waitEvent);
   mu_run_test(test_waitEventFail);
   mu_run_test(test_queueRX);
+  mu_run_test(test_AllocatedEvent);
   return NULL;
 }
 
@@ -334,8 +400,10 @@ int main(int argc, char **argv) {
 
   (void)xTaskCreateStatic(TestTask, "Test something", 512, NULL, 1, xStackTest,
                           &xTaskBufferTest);
-  xQueueTest = xQueueCreateStatic(CMD_QUEUE_SIZE, sizeof(event_msg_t),
+  xQueueTest = xQueueCreateStatic(CMD_QUEUE_SIZE, sizeof(void*),
                                  ucQueueStorage, &xStaticQueue);
+  xQueueTest2 = xQueueCreateStatic(CMD_QUEUE_SIZE, sizeof(void *),
+                                  ucQueueStorage2, &xStaticQueue2);
   initEventBus();
   vTaskStartScheduler();
   return (EXIT_SUCCESS);

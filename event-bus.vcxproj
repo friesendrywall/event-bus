@@ -111,12 +111,14 @@
     <ClCompile Include="main.c" />
     <ClCompile Include="Run-time-stats-utils.c" />
     <ClCompile Include="src\event_bus.c" />
+    <ClCompile Include="src\mem_pool.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="event_bus_config.h" />
     <ClInclude Include="FreeRTOSConfig.h" />
     <ClInclude Include="minunit.h" />
     <ClInclude Include="src\event_bus.h" />
+    <ClInclude Include="src\mem_pool.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

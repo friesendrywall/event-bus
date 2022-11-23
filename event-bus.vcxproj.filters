@@ -57,6 +57,9 @@
     <ClCompile Include="FreeRTOS-Kernel\portable\MSVC-MingW\port.c">
       <Filter>FreeRTOS\portable</Filter>
     </ClCompile>
+    <ClCompile Include="src\mem_pool.c">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="event_bus_config.h">
@@ -70,6 +73,9 @@
     </ClInclude>
     <ClInclude Include="minunit.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\mem_pool.h">
+      <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

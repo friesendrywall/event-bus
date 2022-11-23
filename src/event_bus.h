@@ -25,6 +25,8 @@
 #ifndef EVENTBUS_H
 #define EVENTBUS_H
 
+#define EVENT_BUS_VERSION "0.50.00"
+
 #define EVENT_BUS_FLAGS_RETAIN (1UL << 0)
 #define EVENT_BUS_BITS (32 * EVENT_BUS_MASK_WIDTH)
 #define EVENT_BUS_LAST_PARAM (EVENT_BUS_BITS + 1)
@@ -53,16 +55,10 @@
 
 typedef struct {
   uint32_t event;
-  uint32_t params; /* for externally shared queue */
-  uint16_t publisherId;
-  uint16_t len;
-  union {
-#ifdef EVENT_BUS_CUSTOM_VALUE_TYPES
-    EVENT_BUS_CUSTOM_VALUE_TYPES;
-#endif
-    void *ptr;
-    uint32_t value;
-  };
+  uint16_t refCount;
+  uint16_t publisherId : 12;
+  uint16_t dynamicAlloc : 1;
+  uint16_t lg : 1;
 } event_msg_t;
 
 typedef void (*eventCallback)(event_msg_t *);
@@ -87,10 +83,12 @@ void attachBus(event_listener_t *listener);
 void detachBus(event_listener_t *listener);
 void publishEvent(event_msg_t *event, bool retain);
 BaseType_t publishEventFromISR(event_msg_t *event);
-void publishEventQ(uint32_t event, uint32_t value);
 void invalidateEvent(event_msg_t *event);
 #ifdef EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
 BaseType_t waitEvent(uint32_t event, uint32_t waitTicks);
 #endif
+void *threadEventAlloc(size_t size);
+void *eventAlloc(size_t size);
+void eventRelease(void *event);
 
 #endif /* EVENTBUS_H */

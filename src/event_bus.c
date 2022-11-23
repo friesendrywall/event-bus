@@ -32,6 +32,7 @@
 #include <timers.h>
 #include "event_bus.h"
 #include "event_bus_config.h"
+#include "mem_pool.h"
 
 static event_listener_t *firstEvent = NULL;
 static event_msg_t *retainedEvents[EVENT_BUS_BITS] = {0};
@@ -64,14 +65,25 @@ static StaticQueue_t xStaticQueue;
 static uint8_t ucQueueStorage[EVENT_BUS_MAX_CMD_QUEUE * sizeof(EVENT_CMD)];
 static QueueHandle_t xQueueCmd = NULL;
 
+/* Event memory pool */
+#define POOL_SIZE_CALC(size) (size + sizeof(event_msg_t))
+static uint8_t smEventPool[EVENT_BUS_POOL_SM_LN *
+                           POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ)] = {0};
+static uint8_t lgEventPool[EVENT_BUS_POOL_LG_LN *
+                           POOL_SIZE_CALC(EVENT_BUS_POOL_LG_SZ)] = {0};
+static mp_pool_t mpSmall = {0};
+static mp_pool_t mpLarge = {0};
+
 static inline void prvSendEvent(event_listener_t *listener,
                                 event_msg_t *eventParams) {
   if (listener->callback != NULL) {
     listener->callback(eventParams);
   } else if (listener->queueHandle != NULL) {
-    if (xQueueSendToBackFromISR(listener->queueHandle, (void *)eventParams, NULL) != pdTRUE) {
+    if (xQueueSendToBackFromISR(listener->queueHandle, (void *)&eventParams, NULL) != pdTRUE) {
       listener->errFull = 1;
       EVENT_BUS_DEBUG_QUEUE_FULL(listener->name);
+    } else if (eventParams->dynamicAlloc) {
+      eventParams->refCount++;
     }
   } else if (listener->waitingTask != NULL) {
     xTaskNotifyGive(listener->waitingTask);
@@ -304,25 +316,8 @@ BaseType_t publishEventFromISR(event_msg_t *event) {
   configASSERT(event->event < EVENT_BUS_BITS);
   EVENT_CMD cmd = {
       .command = CMD_NEW_EVENT, .eventData = event, .params = 0};
-  cmd.xCallingTask = xTaskGetCurrentTaskHandle();
+  cmd.xCallingTask = NULL;
   return xQueueSendToBackFromISR(xQueueCmd, (void *)&cmd, NULL) == pdTRUE;
-}
-
-void publishEventQ(uint32_t event, uint32_t value) {
-  event_msg_t newEvent = {0};
-  configASSERT(event < EVENT_BUS_BITS);
-  newEvent.event = event;
-  newEvent.value = value;
-  EVENT_CMD cmd = {
-      .command = CMD_NEW_EVENT, .eventData = &newEvent, .params = 0};
-  cmd.xCallingTask = xTaskGetCurrentTaskHandle();
-  xQueueSendToBack(xQueueCmd, (void *)&cmd, portMAX_DELAY);
-#ifdef EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
-  ulTaskNotifyTakeIndexed(EVENT_BUS_USE_TASK_NOTIFICATION_INDEX, pdTRUE,
-                          portMAX_DELAY);
-#else
-  taskYIELD();
-#endif
 }
 
 void invalidateEvent(event_msg_t *event) {
@@ -364,5 +359,57 @@ TaskHandle_t initEventBus(void) {
                         EVENT_BUS_RTOS_PRIORITY, xStack, &xTaskBuffer);
   xQueueCmd = xQueueCreateStatic(EVENT_BUS_MAX_CMD_QUEUE, sizeof(EVENT_CMD),
                                  ucQueueStorage, &xStaticQueue);
+
+  mp_init(EVENT_BUS_POOL_SM_LN, POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ),
+          smEventPool, &mpSmall);
+  mp_init(EVENT_BUS_POOL_LG_LN, POOL_SIZE_CALC(EVENT_BUS_POOL_LG_SZ),
+          lgEventPool, &mpLarge);
   return processHandle;
+}
+
+static void *prvEventAlloc(size_t size, uint16_t refCount) {
+  event_msg_t *val;
+  configASSERT(size >= sizeof(event_msg_t));
+  configASSERT(size <= POOL_SIZE_CALC(EVENT_BUS_POOL_LG_SZ));
+  vTaskSuspendAll();
+  if (size > POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ)) {
+    val = mp_malloc(&mpLarge);
+  } else {
+    val = mp_malloc(&mpSmall);
+  }
+  if (val != NULL) {
+    val->lg = size > POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ);
+    val->dynamicAlloc = 1;
+    val->refCount = refCount;
+  }
+  xTaskResumeAll();
+  return (void *)val;
+}
+
+void *eventAlloc(size_t size) {
+  /* Zero ref count */
+  return prvEventAlloc(size, 0);
+}
+
+void *threadEventAlloc(size_t size) {
+  /* Single ref count */
+  return prvEventAlloc(size, 1);
+}
+
+void eventRelease(void *event) {
+  event_msg_t *e = event;
+  configASSERT(e->dynamicAlloc);
+  configASSERT(e->refCount > 0); /* Too many releases */
+  vTaskSuspendAll();
+  if (e->dynamicAlloc) {
+    e->refCount--;
+    if (e->refCount == 0) {
+      if (e->lg) {
+        mp_free(&mpLarge, event);
+      } else {
+        mp_free(&mpSmall, event);
+      }
+    }
+  }
+  xTaskResumeAll();
 }
