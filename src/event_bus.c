@@ -107,6 +107,16 @@ static void prvPublishEvent(event_msg_t *eventParams, bool retain) {
     }
     ev = ev->next;
   }
+  /* If no subscribers, make sure event is free'd */
+  if (eventParams->dynamicAlloc && eventParams->refCount == 0) {
+    vTaskSuspendAll();
+    if (eventParams->lg) {
+      mp_free(&mpLarge, eventParams);
+    } else {
+      mp_free(&mpSmall, eventParams);
+    }
+    xTaskResumeAll();
+  }
 }
 
 static void prvSubscribeAdd(event_listener_t *listener, uint32_t newEvent) {
