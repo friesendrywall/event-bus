@@ -85,7 +85,7 @@ void invalidateEvent(event_msg_t *ev);
 #ifdef EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
 BaseType_t waitEvent(uint32_t event, uint32_t waitTicks);
 #endif
-void *threadEventAlloc(size_t size, uint32_t eventId, uint16_t publisherId);
+void *threadEventAlloc(size_t size, uint32_t eventId);
 void *eventAlloc(size_t size, uint32_t eventId, uint16_t publisherId);
 void eventRelease(event_msg_t *ev);
 

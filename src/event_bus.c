@@ -405,16 +405,15 @@ void *eventAlloc(size_t size, uint32_t eventId, uint16_t publisherId) {
   return prvEventAlloc(size, eventId, publisherId, 0);
 }
 
-void *threadEventAlloc(size_t size, uint32_t eventId, uint16_t publisherId) {
+void *threadEventAlloc(size_t size, uint32_t eventId) {
   /* Single ref count */
-  return prvEventAlloc(size, eventId, publisherId, 1);
+  return prvEventAlloc(size, eventId, 0, 1);
 }
 
 void eventRelease(event_msg_t *ev) {
-  configASSERT(ev->dynamicAlloc);
-  configASSERT(ev->refCount > 0); /* Too many releases */
   vTaskSuspendAll();
   if (ev->dynamicAlloc) {
+    configASSERT(ev->refCount > 0); /* Too many releases */
     ev->refCount--;
     if (ev->refCount == 0) {
       if (ev->lg) {
