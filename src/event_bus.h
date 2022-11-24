@@ -80,7 +80,7 @@ void unSubEvent(event_listener_t *listener, uint32_t eventId);
 void attachBus(event_listener_t *listener);
 void detachBus(event_listener_t *listener);
 void publishEvent(event_msg_t *ev, bool retain);
-BaseType_t publishThreadEvent(QueueHandle_t xQueue, event_msg_t *ev,
+BaseType_t publishToQueue(QueueHandle_t xQueue, event_msg_t *ev,
                               TickType_t xTicksToWait);
 BaseType_t publishEventFromISR(event_msg_t *ev);
 void invalidateEvent(event_msg_t *ev);
