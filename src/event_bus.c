@@ -331,6 +331,11 @@ BaseType_t publishEventFromISR(event_msg_t *ev) {
   return xQueueSendToBackFromISR(xQueueCmd, (void *)&cmd, NULL) == pdTRUE;
 }
 
+BaseType_t publishToQueue(QueueHandle_t xQueue, event_msg_t *ev,
+                          TickType_t xTicksToWait) {
+  return xQueueSendToBack(xQueue, &ev, xTicksToWait);
+}
+
 void invalidateEvent(event_msg_t *ev) {
   configASSERT(ev);
   EVENT_CMD cmd = {.command = CMD_INVALIDATE_EVENT, .eventData = ev};

@@ -331,7 +331,7 @@ static const char *test_AllocatedEvent(void) {
   static StaticTimer_t xTimerBuffer;
   xTimer = xTimerCreateStatic("Timer", 250 / portTICK_PERIOD_MS, pdFALSE, (void *)0,
                          vTimerAllocatedCallback, &xTimerBuffer);
-  event_value_t *empty = threadEventAlloc(sizeof(event_value_t), 0, 0);
+  event_value_t *empty = threadEventAlloc(sizeof(event_value_t), 0);
   test_setup();
   event_value_t *rx;
   event_value_t *rx2;
@@ -359,6 +359,21 @@ static const char *test_AllocatedEvent(void) {
   return NULL;
 }
 
+static const char *test_StaticMsg(void) {
+  static event_value_t msg = {.e = {.event = EVENT_1}, .value = 0xEF};
+  event_value_t *tx = &msg;
+  test_setup();
+  event_value_t *rx;
+  publishToQueue(xQueueTest, tx, portMAX_DELAY);
+  // xQueueSendToBack(xQueueTest, &tx, portMAX_DELAY);
+  BaseType_t result1 =
+      xQueueReceive(xQueueTest, &rx, 500 / portTICK_PERIOD_MS);
+
+  mu_assert("error, Static event != 0xEF", rx->value == 0xEF);
+
+  return NULL;
+}
+
 static const char *all_tests() {
   mu_run_test(test_pubSub);
   mu_run_test(test_pubSubHighBits);
@@ -374,6 +389,7 @@ static const char *all_tests() {
   mu_run_test(test_waitEventFail);
   mu_run_test(test_queueRX);
   mu_run_test(test_AllocatedEvent);
+  mu_run_test(test_StaticMsg);
   return NULL;
 }
 
