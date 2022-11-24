@@ -416,8 +416,8 @@ void eventRelease(event_msg_t *ev) {
   vTaskSuspendAll();
   if (ev->dynamicAlloc) {
     ev->refCount--;
-    if (e->refCount == 0) {
-      if (e->lg) {
+    if (ev->refCount == 0) {
+      if (ev->lg) {
         mp_free(&mpLarge, ev);
       } else {
         mp_free(&mpSmall, ev);

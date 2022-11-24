@@ -352,10 +352,10 @@ static const char *test_AllocatedEvent(void) {
   xTimerStop(xTimer, 0);
   mu_assert("error, Allocated event 1 != 0xB0", rx->value == 0xB0);
   mu_assert("error, Allocated event 2 != 0xB0", rx->value == 0xB0);
-  eventRelease(rx);
+  eventRelease((event_msg_t *)rx);
   mu_assert("error, RefCount != 1", rx->e.refCount == 1);
-  eventRelease(rx);
-  eventRelease(empty);
+  eventRelease((event_msg_t *)rx);
+  eventRelease((event_msg_t *)empty);
   return NULL;
 }
 
