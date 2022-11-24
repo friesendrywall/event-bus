@@ -306,11 +306,12 @@ void detachBus(event_listener_t *listener) {
 #endif
 }
 
-void publishEvent(void *event, bool retain) {
-  configASSERT(event);
-  configASSERT(((event_msg_t *)event)->event < EVENT_BUS_BITS);
-  EVENT_CMD cmd = {
-      .command = CMD_NEW_EVENT, .eventData = event, .params = retain};
+void publishEvent(event_msg_t *ev, bool retain) {
+  configASSERT(ev);
+  configASSERT(ev->event < EVENT_BUS_BITS);
+  /* Retained events must be statically allocated */
+  configASSERT(retain ? ev->dynamicAlloc == 0 : 1);
+  EVENT_CMD cmd = {.command = CMD_NEW_EVENT, .eventData = ev, .params = retain};
   cmd.xCallingTask = xTaskGetCurrentTaskHandle();
   xQueueSendToBack(xQueueCmd, (void *)&cmd, portMAX_DELAY);
 #ifdef EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
@@ -321,18 +322,18 @@ void publishEvent(void *event, bool retain) {
 #endif
 }
 
-BaseType_t publishEventFromISR(void *event) {
-  configASSERT(event);
-  configASSERT(((event_msg_t *)event)->event < EVENT_BUS_BITS);
+BaseType_t publishEventFromISR(event_msg_t *ev) {
+  configASSERT(ev);
+  configASSERT(ev->event < EVENT_BUS_BITS);
   EVENT_CMD cmd = {
-      .command = CMD_NEW_EVENT, .eventData = event, .params = 0};
+      .command = CMD_NEW_EVENT, .eventData = ev, .params = 0};
   cmd.xCallingTask = NULL;
   return xQueueSendToBackFromISR(xQueueCmd, (void *)&cmd, NULL) == pdTRUE;
 }
 
-void invalidateEvent(void *event) {
-  configASSERT(event);
-  EVENT_CMD cmd = {.command = CMD_INVALIDATE_EVENT, .eventData = event};
+void invalidateEvent(event_msg_t *ev) {
+  configASSERT(ev);
+  EVENT_CMD cmd = {.command = CMD_INVALIDATE_EVENT, .eventData = ev};
   cmd.xCallingTask = xTaskGetCurrentTaskHandle();
   xQueueSendToBack(xQueueCmd, (void *)&cmd, portMAX_DELAY);
 #ifdef EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
@@ -409,18 +410,17 @@ void *threadEventAlloc(size_t size, uint32_t eventId, uint16_t publisherId) {
   return prvEventAlloc(size, eventId, publisherId, 1);
 }
 
-void eventRelease(void *event) {
-  event_msg_t *e = event;
-  configASSERT(e->dynamicAlloc);
-  configASSERT(e->refCount > 0); /* Too many releases */
+void eventRelease(event_msg_t *ev) {
+  configASSERT(ev->dynamicAlloc);
+  configASSERT(ev->refCount > 0); /* Too many releases */
   vTaskSuspendAll();
-  if (e->dynamicAlloc) {
-    e->refCount--;
+  if (ev->dynamicAlloc) {
+    ev->refCount--;
     if (e->refCount == 0) {
       if (e->lg) {
-        mp_free(&mpLarge, event);
+        mp_free(&mpLarge, ev);
       } else {
-        mp_free(&mpSmall, event);
+        mp_free(&mpSmall, ev);
       }
     }
   }
