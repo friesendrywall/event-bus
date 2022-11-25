@@ -55,23 +55,23 @@
 
 typedef struct {
   uint32_t event;
-  uint16_t refCount;
+  volatile uint16_t refCount;
   uint16_t publisherId : 12;
   uint16_t dynamicAlloc : 1;
   uint16_t lg : 1;
-} event_msg_t;
+} event_t;
 
-struct EVENT_T {
+struct LISTENER_T {
   uint32_t eventMask[EVENT_BUS_MASK_WIDTH];
   uint32_t errFull : 1;
-  void (*callback)(event_msg_t *ev);
+  void (*callback)(event_t *ev);
   QueueHandle_t queueHandle;
   TaskHandle_t waitingTask;
   const char * name;
-  struct EVENT_T *prev;
-  struct EVENT_T *next;
+  struct LISTENER_T *prev;
+  struct LISTENER_T *next;
 };
-typedef struct EVENT_T event_listener_t;
+typedef struct LISTENER_T event_listener_t;
 
 TaskHandle_t initEventBus(void);
 void subEvent(event_listener_t *listener, uint32_t eventId);
@@ -79,16 +79,15 @@ void subEventList(event_listener_t *listener, const uint32_t *eventList);
 void unSubEvent(event_listener_t *listener, uint32_t eventId);
 void attachBus(event_listener_t *listener);
 void detachBus(event_listener_t *listener);
-void publishEvent(event_msg_t *ev, bool retain);
-BaseType_t publishToQueue(QueueHandle_t xQueue, event_msg_t *ev,
+void publishEvent(event_t *ev, bool retain);
+BaseType_t publishToQueue(QueueHandle_t xQueue, event_t *ev,
                               TickType_t xTicksToWait);
-BaseType_t publishEventFromISR(event_msg_t *ev);
-void invalidateEvent(event_msg_t *ev);
+BaseType_t publishEventFromISR(event_t *ev);
+void invalidateEvent(event_t *ev);
 #ifdef EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
 BaseType_t waitEvent(uint32_t event, uint32_t waitTicks);
 #endif
-void *threadEventAlloc(size_t size, uint32_t eventId);
 void *eventAlloc(size_t size, uint32_t eventId, uint16_t publisherId);
-void eventRelease(event_msg_t *ev);
+void eventRelease(event_t *ev);
 
 #endif /* EVENTBUS_H */

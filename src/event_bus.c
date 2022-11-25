@@ -35,7 +35,7 @@
 #include "mem_pool.h"
 
 static event_listener_t *firstEvent = NULL;
-static event_msg_t *retainedEvents[EVENT_BUS_BITS] = {0};
+static event_t *retainedEvents[EVENT_BUS_BITS] = {0};
 
 typedef enum {
   CMD_ATTACH,
@@ -66,7 +66,7 @@ static uint8_t ucQueueStorage[EVENT_BUS_MAX_CMD_QUEUE * sizeof(EVENT_CMD)];
 static QueueHandle_t xQueueCmd = NULL;
 
 /* Event memory pool */
-#define POOL_SIZE_CALC(size) (size + sizeof(event_msg_t))
+#define POOL_SIZE_CALC(size) (size + sizeof(event_t))
 static uint8_t smEventPool[EVENT_BUS_POOL_SM_LN *
                            POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ)] = {0};
 static uint8_t lgEventPool[EVENT_BUS_POOL_LG_LN *
@@ -75,7 +75,7 @@ static mp_pool_t mpSmall = {0};
 static mp_pool_t mpLarge = {0};
 
 static inline void prvSendEvent(event_listener_t *listener,
-                                event_msg_t *eventParams) {
+                                event_t *eventParams) {
   if (listener->callback != NULL) {
     listener->callback(eventParams);
   } else if (listener->queueHandle != NULL) {
@@ -90,7 +90,7 @@ static inline void prvSendEvent(event_listener_t *listener,
   }
 }
 
-static void prvPublishEvent(event_msg_t *eventParams, bool retain) {
+static void prvPublishEvent(event_t *eventParams, bool retain) {
   configASSERT(eventParams);
   configASSERT(eventParams->event < EVENT_BUS_BITS);
 
@@ -185,7 +185,7 @@ static void prvDetachFromBus(event_listener_t *listener) {
   listener->next = listener->prev = NULL;
 }
 
-static void prvInvdaliteEvent(event_msg_t *event) {
+static void prvInvdaliteEvent(event_t *event) {
   configASSERT(event);
   configASSERT(event->event < EVENT_BUS_BITS);
   /* Delete previously retained event */
@@ -306,7 +306,7 @@ void detachBus(event_listener_t *listener) {
 #endif
 }
 
-void publishEvent(event_msg_t *ev, bool retain) {
+void publishEvent(event_t *ev, bool retain) {
   configASSERT(ev);
   configASSERT(ev->event < EVENT_BUS_BITS);
   /* Retained events must be statically allocated */
@@ -322,7 +322,7 @@ void publishEvent(event_msg_t *ev, bool retain) {
 #endif
 }
 
-BaseType_t publishEventFromISR(event_msg_t *ev) {
+BaseType_t publishEventFromISR(event_t *ev) {
   configASSERT(ev);
   configASSERT(ev->event < EVENT_BUS_BITS);
   EVENT_CMD cmd = {
@@ -331,12 +331,17 @@ BaseType_t publishEventFromISR(event_msg_t *ev) {
   return xQueueSendToBackFromISR(xQueueCmd, (void *)&cmd, NULL) == pdTRUE;
 }
 
-BaseType_t publishToQueue(QueueHandle_t xQueue, event_msg_t *ev,
+BaseType_t publishToQueue(QueueHandle_t xQueue, event_t *ev,
                           TickType_t xTicksToWait) {
+  vTaskSuspendAll(); /* May not be necessary */
+  if (ev->dynamicAlloc) {
+    ev->refCount++;
+  }
+  xTaskResumeAll();
   return xQueueSendToBack(xQueue, &ev, xTicksToWait);
 }
 
-void invalidateEvent(event_msg_t *ev) {
+void invalidateEvent(event_t *ev) {
   configASSERT(ev);
   EVENT_CMD cmd = {.command = CMD_INVALIDATE_EVENT, .eventData = ev};
   cmd.xCallingTask = xTaskGetCurrentTaskHandle();
@@ -383,10 +388,10 @@ TaskHandle_t initEventBus(void) {
   return processHandle;
 }
 
-static void *prvEventAlloc(size_t size, uint32_t eventId, uint16_t publisherId,
-                           uint16_t refCount) {
-  event_msg_t *val;
-  configASSERT(size >= sizeof(event_msg_t));
+void *eventAlloc(size_t size, uint32_t eventId,
+                           uint16_t publisherId) {
+  event_t *val;
+  configASSERT(size >= sizeof(event_t));
   configASSERT(size <= POOL_SIZE_CALC(EVENT_BUS_POOL_LG_SZ));
   vTaskSuspendAll();
   if (size > POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ)) {
@@ -394,28 +399,17 @@ static void *prvEventAlloc(size_t size, uint32_t eventId, uint16_t publisherId,
   } else {
     val = mp_malloc(&mpSmall);
   }
-  if (val != NULL) {
-    val->lg = size > POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ);
-    val->dynamicAlloc = 1;
-    val->refCount = refCount;
-    val->event = eventId;
-    val->publisherId = publisherId;
-  }
+  configASSERT(val);
+  val->lg = size > POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ);
+  val->dynamicAlloc = 1;
+  val->refCount = 0;
+  val->event = eventId;
+  val->publisherId = publisherId;
   xTaskResumeAll();
   return (void *)val;
 }
 
-void *eventAlloc(size_t size, uint32_t eventId, uint16_t publisherId) {
-  /* Zero ref count */
-  return prvEventAlloc(size, eventId, publisherId, 0);
-}
-
-void *threadEventAlloc(size_t size, uint32_t eventId) {
-  /* Single ref count */
-  return prvEventAlloc(size, eventId, 0, 1);
-}
-
-void eventRelease(event_msg_t *ev) {
+void eventRelease(event_t *ev) {
   vTaskSuspendAll();
   if (ev->dynamicAlloc) {
     configASSERT(ev->refCount > 0); /* Too many releases */

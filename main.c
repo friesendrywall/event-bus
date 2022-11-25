@@ -54,7 +54,7 @@ static uint32_t results[CALLBACK_4 + 1];
 static uint32_t eventResult[EVENT_BUS_BITS];
 
 typedef struct {
-  event_msg_t e;
+  event_t e;
   uint32_t value;
 } event_value_t;
 
@@ -66,7 +66,7 @@ void publishEventQ(uint32_t event, uint32_t value) {
   publishEvent(&newEvent.e, false);
 }
 
-void callback1(event_msg_t *eventParams) {
+void callback1(event_t *eventParams) {
   event_value_t *val = (event_value_t *)eventParams;
   results[CALLBACK_1] = val->value;
   eventResult[val->e.event] = val->value;
@@ -74,7 +74,7 @@ void callback1(event_msg_t *eventParams) {
          eventParams);
 }
 
-void callback2(event_msg_t *eventParams) {
+void callback2(event_t *eventParams) {
   event_value_t *val = (event_value_t *)eventParams;
   results[CALLBACK_2] = val->value;
   eventResult[val->e.event] = val->value;
@@ -82,7 +82,7 @@ void callback2(event_msg_t *eventParams) {
          val->value, eventParams, val->e.publisherId);
 }
 
-void callback3(event_msg_t *eventParams) {
+void callback3(event_t *eventParams) {
   event_value_t *val = (event_value_t *)eventParams;
   results[CALLBACK_3] = val->value;
   eventResult[val->e.event] = val->value;
@@ -90,7 +90,7 @@ void callback3(event_msg_t *eventParams) {
          eventParams);
 }
 
-void callback4(event_msg_t *eventParams) {
+void callback4(event_t *eventParams) {
   event_value_t *val = (event_value_t *)eventParams;
   results[CALLBACK_4] = val->value;
   eventResult[val->e.event] = val->value;
@@ -331,7 +331,8 @@ static const char *test_AllocatedEvent(void) {
   static StaticTimer_t xTimerBuffer;
   xTimer = xTimerCreateStatic("Timer", 250 / portTICK_PERIOD_MS, pdFALSE, (void *)0,
                          vTimerAllocatedCallback, &xTimerBuffer);
-  event_value_t *empty = threadEventAlloc(sizeof(event_value_t), 0);
+  event_value_t *empty = eventAlloc(sizeof(event_value_t), 0, 0);
+  empty->e.refCount++;
   test_setup();
   event_value_t *rx;
   event_value_t *rx2;
@@ -352,10 +353,10 @@ static const char *test_AllocatedEvent(void) {
   xTimerStop(xTimer, 0);
   mu_assert("error, Allocated event 1 != 0xB0", rx->value == 0xB0);
   mu_assert("error, Allocated event 2 != 0xB0", rx->value == 0xB0);
-  eventRelease((event_msg_t *)rx);
+  eventRelease((event_t *)rx);
   mu_assert("error, RefCount != 1", rx->e.refCount == 1);
-  eventRelease((event_msg_t *)rx);
-  eventRelease((event_msg_t *)empty);
+  eventRelease((event_t *)rx);
+  eventRelease((event_t *)empty);
   return NULL;
 }
 
@@ -364,7 +365,7 @@ static const char *test_StaticMsg(void) {
   event_value_t *tx = &msg;
   test_setup();
   event_value_t *rx;
-  publishToQueue(xQueueTest, tx, portMAX_DELAY);
+  publishToQueue(xQueueTest, (event_t *)tx, portMAX_DELAY);
   // xQueueSendToBack(xQueueTest, &tx, portMAX_DELAY);
   BaseType_t result1 =
       xQueueReceive(xQueueTest, &rx, 500 / portTICK_PERIOD_MS);
