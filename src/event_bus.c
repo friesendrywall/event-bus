@@ -381,9 +381,9 @@ TaskHandle_t initEventBus(void) {
   xQueueCmd = xQueueCreateStatic(EVENT_BUS_MAX_CMD_QUEUE, sizeof(EVENT_CMD),
                                  ucQueueStorage, &xStaticQueue);
 
-  mp_init(EVENT_BUS_POOL_SM_LN, POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ),
+  mp_init(POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ), EVENT_BUS_POOL_SM_LN,
           smEventPool, &mpSmall);
-  mp_init(EVENT_BUS_POOL_LG_LN, POOL_SIZE_CALC(EVENT_BUS_POOL_LG_SZ),
+  mp_init(POOL_SIZE_CALC(EVENT_BUS_POOL_LG_SZ), EVENT_BUS_POOL_LG_LN,
           lgEventPool, &mpLarge);
   return processHandle;
 }
