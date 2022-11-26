@@ -98,13 +98,13 @@ void callback4(event_t *eventParams) {
          eventParams);
 }
 
-event_listener_t ev1 = {.callback = callback1};
+event_listener_t ev1 = {.callback = callback1, .name = "EV1"};
 
-event_listener_t ev2 = {.callback = callback2};
+event_listener_t ev2 = {.callback = callback2, .name = "EV2"};
 
-event_listener_t ev3 = {.callback = callback3};
+event_listener_t ev3 = {.callback = callback3, .name = "EV3"};
 
-event_listener_t ev4 = {.callback = callback4};
+event_listener_t ev4 = {.callback = callback4, .name = "EV4"};
 
 int tests_run = 0;
 
@@ -333,6 +333,7 @@ static const char *test_AllocatedEvent(void) {
                          vTimerAllocatedCallback, &xTimerBuffer);
   event_value_t *empty = eventAlloc(sizeof(event_value_t), 0, 0);
   empty->e.refCount++;
+  ev1.refCount++; // To allow below to release with correct number
   test_setup();
   event_value_t *rx;
   event_value_t *rx2;
@@ -352,11 +353,25 @@ static const char *test_AllocatedEvent(void) {
       xQueueReceive(xQueueTest2, &rx2, 5000 / portTICK_PERIOD_MS);
   xTimerStop(xTimer, 0);
   mu_assert("error, Allocated event 1 != 0xB0", rx->value == 0xB0);
-  mu_assert("error, Allocated event 2 != 0xB0", rx->value == 0xB0);
-  eventRelease((event_t *)rx);
+  mu_assert("error, Allocated event 2 != 0xB0", rx2->value == 0xB0);
+  eventRelease((event_t *)rx, &ev1);
   mu_assert("error, RefCount != 1", rx->e.refCount == 1);
-  eventRelease((event_t *)rx);
-  eventRelease((event_t *)empty);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  eventRelease((event_t *)rx2, &ev2);
+  eventRelease((event_t *)empty, &ev1);
+  /* Print test */
+  char pBuf[1024];
+  uint32_t pLen;
+  printf("Event Listener info\r\n\r\n");
+  pLen = eventListenerInfo(pBuf, sizeof(pBuf));
+  printf(pBuf);
+  printf("\r\nEvent Response info\r\n\r\n");
+  pLen = eventResponseInfo(pBuf, sizeof(pBuf));
+  printf(pBuf);
+  printf("\r\nEvent Pool info\r\n\r\n");
+  pLen = eventPoolInfo(pBuf, sizeof(pBuf));
+  printf(pBuf);
+  printf("\r\n");
   return NULL;
 }
 
@@ -365,13 +380,12 @@ static const char *test_StaticMsg(void) {
   event_value_t *tx = &msg;
   test_setup();
   event_value_t *rx;
-  publishToQueue(xQueueTest, (event_t *)tx, portMAX_DELAY);
+  publishToListener(&ev1, (event_t *)tx, portMAX_DELAY);
   // xQueueSendToBack(xQueueTest, &tx, portMAX_DELAY);
   BaseType_t result1 =
       xQueueReceive(xQueueTest, &rx, 500 / portTICK_PERIOD_MS);
 
   mu_assert("error, Static event != 0xEF", rx->value == 0xEF);
-
   return NULL;
 }
 

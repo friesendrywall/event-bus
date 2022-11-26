@@ -25,7 +25,7 @@
 #ifndef EVENTBUS_H
 #define EVENTBUS_H
 
-#define EVENT_BUS_VERSION "0.50.01"
+#define EVENT_BUS_VERSION "0.50.02"
 
 #define EVENT_BUS_FLAGS_RETAIN (1UL << 0)
 #define EVENT_BUS_BITS (32 * EVENT_BUS_MASK_WIDTH)
@@ -55,14 +55,15 @@
 
 typedef struct {
   uint32_t event;
+  uint32_t publishTime;
   volatile uint16_t refCount;
   uint16_t publisherId : 12;
-  uint16_t dynamicAlloc : 1;
-  uint16_t lg : 1;
+  uint16_t dynamicAlloc : 4;
 } event_t;
 
 struct LISTENER_T {
   uint32_t eventMask[EVENT_BUS_MASK_WIDTH];
+  uint32_t refCount : 16; /* Debug helper */
   uint32_t errFull : 1;
   void (*callback)(event_t *ev);
   QueueHandle_t queueHandle;
@@ -80,14 +81,18 @@ void unSubEvent(event_listener_t *listener, uint32_t eventId);
 void attachBus(event_listener_t *listener);
 void detachBus(event_listener_t *listener);
 void publishEvent(event_t *ev, bool retain);
-BaseType_t publishToQueue(QueueHandle_t xQueue, event_t *ev,
-                              TickType_t xTicksToWait);
+BaseType_t publishToListener(event_listener_t *listener, event_t *ev,
+                             TickType_t xTicksToWait);
 BaseType_t publishEventFromISR(event_t *ev);
 void invalidateEvent(event_t *ev);
 #ifdef EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
 BaseType_t waitEvent(uint32_t event, uint32_t waitTicks);
 #endif
 void *eventAlloc(size_t size, uint32_t eventId, uint16_t publisherId);
-void eventRelease(event_t *ev);
+void eventRelease(event_t *ev, event_listener_t *listener);
+/* Debugging aids */
+uint32_t eventListenerInfo(char *const buf, uint32_t bufLen);
+uint32_t eventResponseInfo(char *const buf, uint32_t bufLen);
+uint32_t eventPoolInfo(char *const buf, uint32_t bufLen);
 
 #endif /* EVENTBUS_H */

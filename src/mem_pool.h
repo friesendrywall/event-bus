@@ -30,11 +30,21 @@ struct mp_data {
   size_t ul_bc; // the count of unlinked blocks in the memory pool
   uint32_t high_water;
   uint32_t count;
-  void *b;      // a pointer to the head of the linked list of unused blocks
-  void *ul_b;   // a pointer to the first unlinked block
+  uint32_t initialBlocks;
+  void *start; // Integrity validation
+  void *end;   // Integrity validation
+  void *b;     // a pointer to the head of the linked list of unused blocks
+  void *ul_b;  // a pointer to the first unlinked block
 };
 
 typedef struct mp_data mp_pool_t;
+
+typedef struct {
+  uint32_t high_water;
+  uint32_t count;
+  uint32_t blockCount;
+  uint32_t freeCount;
+} mp_info_t;
 
 /*
  * Initialize the memory pool.
@@ -53,5 +63,7 @@ void *mp_malloc(mp_pool_t *mp);
  * Adds a block to the list of free blocks
  */
 void mp_free(mp_pool_t *mp, void *b);
+
+uint32_t mp_integrity(mp_pool_t *mp, mp_info_t *info);
 
 #endif /* MEMPOOL_H */

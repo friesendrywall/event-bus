@@ -18,6 +18,7 @@
  */
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "mem_pool.h"
 
@@ -29,6 +30,9 @@ int mp_init(size_t bs, size_t bc, void *m, mp_pool_t *mp) {
   if (bs < sizeof(size_t)) {
     return -1;
   }
+  mp->initialBlocks = bc;
+  mp->start = m;
+  mp->end = (void *)&((uint8_t *)m)[bs * bc];
   mp->bs = bs;
   mp->ul_bc = bc;
   mp->b = NULL;
@@ -72,4 +76,29 @@ void mp_free(mp_pool_t *mp, void *b) {
   ((struct block *)b)->next = mp->b;
   mp->b = b;
   mp->count--; /* EF */
+}
+
+uint32_t mp_integrity(mp_pool_t *mp, mp_info_t *info) {
+  info->freeCount = 0;
+  info->high_water = mp->high_water;
+  info->count = mp->count;
+  info->blockCount = mp->initialBlocks;
+  // Walk the free list
+  void *mp_b = mp->b;
+  while (mp_b) {
+
+    void *b = mp_b;
+    mp_b = ((struct block *)mp_b)->next;
+    // Does next land inside the parameters?
+    if (mp_b && (mp_b < mp->start || mp_b >= mp->end)) {
+      return 0;
+    }
+    info->freeCount++;
+  }
+
+  if (mp->initialBlocks - mp->count != info->freeCount + mp->ul_bc) {
+    return 0;
+  }
+  // Does it match count?
+  return 1;
 }
