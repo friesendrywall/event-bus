@@ -86,8 +86,6 @@ uint32_t mp_integrity(mp_pool_t *mp, mp_info_t *info) {
   // Walk the free list
   void *mp_b = mp->b;
   while (mp_b) {
-
-    void *b = mp_b;
     mp_b = ((struct block *)mp_b)->next;
     // Does next land inside the parameters?
     if (mp_b && (mp_b < mp->start || mp_b >= mp->end)) {

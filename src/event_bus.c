@@ -454,7 +454,7 @@ void eventRelease(event_t *ev, event_listener_t *listener) {
     ev->refCount--;
     listener->refCount--;
     if (ev->refCount == 0) {
-      if (ev->event < EVENT_BUS_MASK_WIDTH && ev->publishTime) {
+      if (ev->event < EVENT_BUS_BITS && ev->publishTime) {
         eventResponse[ev->event] = EVENT_BUS_TIME_SOURCE - ev->publishTime;
       }
       switch (ev->dynamicAlloc) {
