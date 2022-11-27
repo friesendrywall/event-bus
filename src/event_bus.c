@@ -36,7 +36,8 @@
 
 static event_listener_t *firstListener = NULL;
 static event_t *retainedEvents[EVENT_BUS_BITS] = {0};
-static uint32_t eventResponse[EVENT_BUS_BITS];
+static volatile uint32_t eventMaxResponse[EVENT_BUS_BITS];
+static volatile uint32_t eventMinResponse[EVENT_BUS_BITS];
 
 typedef enum {
   CMD_ATTACH,
@@ -77,8 +78,8 @@ static QueueHandle_t xQueueCmd = NULL;
 #define POOL_SIZE_CALC(size) (size + sizeof(event_t))
 static uint8_t smEventPool[EVENT_BUS_POOL_SM_CT *
                            POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ)] = {0};
-static uint8_t mdEventPool[EVENT_BUS_POOL_LG_CT *
-                           POOL_SIZE_CALC(EVENT_BUS_POOL_LG_SZ)] = {0};
+static uint8_t mdEventPool[EVENT_BUS_POOL_MD_CT *
+                           POOL_SIZE_CALC(EVENT_BUS_POOL_MD_SZ)] = {0};
 static uint8_t lgEventPool[EVENT_BUS_POOL_LG_CT *
                            POOL_SIZE_CALC(EVENT_BUS_POOL_LG_SZ)] = {0};
 static mp_pool_t mpSmall = {0};
@@ -109,6 +110,7 @@ static void prvPublishEvent(event_t *eventParams, bool retain) {
   configASSERT(eventParams);
   configASSERT(eventParams->event < EVENT_BUS_BITS);
   eventParams->publishTime = EVENT_BUS_TIME_SOURCE;
+  eventParams->published = 1;
   if (retain) {
     retainedEvents[eventParams->event] = eventParams;
   } else {
@@ -447,6 +449,7 @@ void *eventAlloc(size_t size, uint32_t eventId, uint16_t publisherId) {
 void eventRelease(event_t *ev, event_listener_t *listener) {
   configASSERT(ev);
   configASSERT(listener);
+  uint32_t evResponse;
   vTaskSuspendAll();
   if (ev->dynamicAlloc) {
     configASSERT(ev->refCount > 0);       /* Too many releases */
@@ -454,12 +457,18 @@ void eventRelease(event_t *ev, event_listener_t *listener) {
     ev->refCount--;
     listener->refCount--;
     if (ev->refCount == 0) {
-      if (ev->event < EVENT_BUS_BITS && ev->publishTime) {
-        eventResponse[ev->event] = EVENT_BUS_TIME_SOURCE - ev->publishTime;
+      if (ev->event < EVENT_BUS_BITS && ev->published) {
+        evResponse = EVENT_BUS_TIME_SOURCE - ev->publishTime;
+        if (evResponse > eventMaxResponse[ev->event]) {
+          eventMaxResponse[ev->event] = evResponse;
+        }
+        if (evResponse < eventMinResponse[ev->event] || !eventMinResponse[ev->event]) {
+          eventMinResponse[ev->event] = evResponse;
+        }
       }
       switch (ev->dynamicAlloc) {
       default:
-        configASSERT(0); /* Something corrupted the event */
+        configASSERT(ev->dynamicAlloc <= DYN_ALLOC_LARGE);
         break;
       case DYN_ALLOC_SMALL:
         mp_free(&mpSmall, ev);
@@ -471,7 +480,6 @@ void eventRelease(event_t *ev, event_listener_t *listener) {
         mp_free(&mpLarge, ev);
         break;
       }
-
     }
   }
   xTaskResumeAll();
@@ -489,7 +497,7 @@ uint32_t eventListenerInfo(char * const buf, uint32_t bufLen) {
   event_listener_t *ev = firstListener;
   vTaskSuspendAll();
   while (ev != NULL) {
-    pLen += snprintf(&buf[pLen], bufLen - pLen, " %-10s % 2i\r\n", ev->name,
+    pLen += snprintf(&buf[pLen], bufLen - pLen, " %-10s %2i\r\n", ev->name,
                      ev->refCount);
     if (pLen >= bufLen) {
       xTaskResumeAll();
@@ -504,19 +512,23 @@ uint32_t eventListenerInfo(char * const buf, uint32_t bufLen) {
 uint32_t eventResponseInfo(char *const buf, uint32_t bufLen) {
   uint32_t pLen;
   uint32_t i;
-  pLen = snprintf(buf, bufLen, "ID  ticks\r\n");
+  pLen = snprintf(buf, bufLen, "ID      min       max\r\n");
   if (pLen >= bufLen) {
     return bufLen;
   }
   vTaskSuspendAll();
   for (i = 0; i < EVENT_BUS_BITS; i++) {
-    if (eventResponse[i]) {
-      pLen += snprintf(&buf[pLen], bufLen - pLen, "% 2i  % 4i\r\n", i,
-                       eventResponse[i]);
+    if (eventMinResponse[i] || eventMaxResponse[i]) {
+      pLen += snprintf(&buf[pLen], bufLen - pLen, "%2i  %4i.%03i  %4i.%03i\r\n", i,
+          eventMinResponse[i] / EVENT_BUS_TIME_DIV_US / 1000,
+          eventMinResponse[i] / EVENT_BUS_TIME_DIV_US % 1000,
+          eventMaxResponse[i] / EVENT_BUS_TIME_DIV_US / 1000,
+          eventMaxResponse[i] / EVENT_BUS_TIME_DIV_US % 1000);
       if (pLen >= bufLen) {
         xTaskResumeAll();
         return bufLen;
       }
+      eventMinResponse[i] = eventMaxResponse[i] = 0;
     }
   }
   xTaskResumeAll();
@@ -537,21 +549,21 @@ uint32_t eventPoolInfo(char *const buf, uint32_t bufLen) {
     return bufLen;
   }
   pLen += snprintf(&buf[pLen], bufLen - pLen,
-                   " Small % 4i  % 4i / % 4i  % 4i  % 4i  % 4s\r\n", info1.count,
+                   " Small %4i  %4i / %4i  %4i  %4i  %4s\r\n", info1.count,
                    info1.freeCount, info1.blockCount, info1.high_water,
                    EVENT_BUS_POOL_SM_SZ, res1 ? "YES" : "NO");
   if (pLen >= bufLen) {
     return bufLen;
   }
   pLen += snprintf(&buf[pLen], bufLen - pLen,
-                   " Med   % 4i  % 4i / % 4i  % 4i  % 4i  % 4s\r\n", info2.count,
+                   " Med   %4i  %4i / %4i  %4i  %4i  %4s\r\n", info2.count,
                    info2.freeCount, info2.blockCount, info2.high_water,
                    EVENT_BUS_POOL_MD_SZ, res2 ? "YES" : "NO");
   if (pLen >= bufLen) {
     return bufLen;
   }
   pLen += snprintf(&buf[pLen], bufLen - pLen,
-                   " Large % 4i  % 4i / % 4i  % 4i  % 4i  % 4s\r\n", info3.count,
+                   " Large %4i  % 4i / %4i  %4i  %4i  %4s\r\n", info3.count,
                    info3.freeCount, info3.blockCount, info3.high_water,
                    EVENT_BUS_POOL_LG_SZ, res3 ? "YES" : "NO");
   if (pLen >= bufLen) {

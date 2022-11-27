@@ -58,7 +58,8 @@ typedef struct {
   uint32_t publishTime;
   volatile uint16_t refCount;
   uint16_t publisherId : 12;
-  uint16_t dynamicAlloc : 4;
+  uint16_t dynamicAlloc : 3;
+  uint16_t published : 1;
 } event_t;
 
 struct LISTENER_T {
