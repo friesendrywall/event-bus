@@ -308,7 +308,9 @@ void attachBus(event_listener_t *listener) {
   EVENT_CMD cmd = {.command = CMD_ATTACH, .eventData = listener};
   cmd.xCallingTask = xTaskGetCurrentTaskHandle();
   /* Subscribing task must have lower priority or weird things will happen */
-  configASSERT(uxTaskPriorityGet(NULL) < EVENT_BUS_RTOS_PRIORITY);
+  if (listener->queueHandle != NULL) {
+    configASSERT(uxTaskPriorityGet(NULL) < EVENT_BUS_RTOS_PRIORITY);
+  }
   xQueueSendToBack(xQueueCmd, (void *)&cmd, portMAX_DELAY);
 #ifdef EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
   ulTaskNotifyTakeIndexed(EVENT_BUS_USE_TASK_NOTIFICATION_INDEX, pdTRUE,
