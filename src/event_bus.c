@@ -422,7 +422,7 @@ TaskHandle_t initEventBus(void) {
 }
 
 void *eventAlloc(size_t size, uint32_t eventId, uint16_t publisherId) {
-  event_t *val;
+  event_t *val = NULL;
   DYN_ALLOC_T dyn = DYN_ALLOC_NONE;
   configASSERT(size >= sizeof(event_t));
   configASSERT(size <= POOL_SIZE_CALC(EVENT_BUS_POOL_LG_SZ));
