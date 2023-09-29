@@ -145,7 +145,7 @@ static void prvPublishEvent(event_t *eventParams, bool retain) {
 }
 
 static void prvSubscribeAdd(event_listener_t *listener, uint32_t newEvent) {
-  configASSERT(newEvent < EVENT_BUS_BITS);
+  configASSERT(newEvent < EVENT_BUS_BITS); /* Probably missing EVENT_BUS_LAST_PARAM */
   listener->eventMask[newEvent / 32] |= (1UL << (newEvent % 32));
   /* Search for any retained events */
   if (retainedEvents[newEvent]) {
@@ -413,11 +413,16 @@ TaskHandle_t initEventBus(void) {
                                  ucQueueStorage, &xStaticQueue);
 
   mp_init(POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ), EVENT_BUS_POOL_SM_CT,
-          smEventPool, &mpSmall);
+      smEventPool, &mpSmall);
   mp_init(POOL_SIZE_CALC(EVENT_BUS_POOL_MD_SZ), EVENT_BUS_POOL_MD_CT,
-          mdEventPool, &mpMed);
+      mdEventPool, &mpMed);
   mp_init(POOL_SIZE_CALC(EVENT_BUS_POOL_LG_SZ), EVENT_BUS_POOL_LG_CT,
-          lgEventPool, &mpLarge);
+      lgEventPool, &mpLarge);
+#ifdef TRC_USE_TRACEALYZER_RECORDER
+#if DEBUG
+  vTraceSetQueueName(xQueueCmd, "events");
+#endif
+#endif
   return processHandle;
 }
 
