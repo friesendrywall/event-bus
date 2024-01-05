@@ -68,10 +68,12 @@ typedef struct {
 
 /* FreeRTOS Stack allocation */
 #define STACK_SIZE configMINIMAL_STACK_SIZE
+#if EVENT_BUS_DYNAMIC_FREERTOS != 1
 static StackType_t xStack[STACK_SIZE];
 static StaticTask_t xTaskBuffer;
 static StaticQueue_t xStaticQueue;
 static uint8_t ucQueueStorage[EVENT_BUS_MAX_CMD_QUEUE * sizeof(EVENT_CMD)];
+#endif
 static QueueHandle_t xQueueCmd = NULL;
 
 /* Event memory pool */
@@ -406,11 +408,16 @@ TaskHandle_t initEventBus(void) {
 #ifdef EVENT_BUS_USE_TASK_NOTIFICATION_INDEX
   configASSERT(EVENT_BUS_USE_TASK_NOTIFICATION_INDEX > 0);
 #endif
+#if EVENT_BUS_DYNAMIC_FREERTOS == 1
+  (void)xTaskCreate(eventBusTasks, "Event-Bus", STACK_SIZE, NULL, EVENT_BUS_RTOS_PRIORITY, &processHandle);
+  xQueueCmd = xQueueCreate(EVENT_BUS_MAX_CMD_QUEUE, sizeof(EVENT_CMD));
+#else
   processHandle =
       xTaskCreateStatic(eventBusTasks, "Event-Bus", STACK_SIZE, NULL,
-                        EVENT_BUS_RTOS_PRIORITY, xStack, &xTaskBuffer);
+          EVENT_BUS_RTOS_PRIORITY, xStack, &xTaskBuffer);
   xQueueCmd = xQueueCreateStatic(EVENT_BUS_MAX_CMD_QUEUE, sizeof(EVENT_CMD),
-                                 ucQueueStorage, &xStaticQueue);
+      ucQueueStorage, &xStaticQueue);
+#endif
 
   mp_init(POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ), EVENT_BUS_POOL_SM_CT,
           smEventPool, &mpSmall);
