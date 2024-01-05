@@ -38,6 +38,7 @@ static event_listener_t *firstListener = NULL;
 static event_t *retainedEvents[EVENT_BUS_BITS] = {0};
 static volatile uint32_t eventMaxResponse[EVENT_BUS_BITS];
 static volatile uint32_t eventMinResponse[EVENT_BUS_BITS];
+static event_listener_t *eventMaxRespList[EVENT_BUS_BITS];
 
 typedef enum {
   CMD_ATTACH,
@@ -111,6 +112,7 @@ static inline void prvSendEvent(event_listener_t *listener,
 static void prvPublishEvent(event_t *eventParams, bool retain) {
   configASSERT(eventParams);
   configASSERT(eventParams->event < EVENT_BUS_BITS);
+  EVENT_BUS_DEBUG_PUB_EVENT(eventParams->event);
   eventParams->publishTime = EVENT_BUS_TIME_SOURCE;
   eventParams->published = 1;
   if (retain) {
@@ -147,7 +149,7 @@ static void prvPublishEvent(event_t *eventParams, bool retain) {
 }
 
 static void prvSubscribeAdd(event_listener_t *listener, uint32_t newEvent) {
-  configASSERT(newEvent < EVENT_BUS_BITS);
+  configASSERT(newEvent < EVENT_BUS_BITS); /* Probably missing EVENT_BUS_LAST_PARAM */
   listener->eventMask[newEvent / 32] |= (1UL << (newEvent % 32));
   /* Search for any retained events */
   if (retainedEvents[newEvent]) {
@@ -370,7 +372,9 @@ BaseType_t publishToListener(event_listener_t *listener, event_t *ev,
     ev->refCount++;
     listener->refCount++;
   }
+  ev->publishTime = EVENT_BUS_TIME_SOURCE;
   xTaskResumeAll();
+  EVENT_BUS_DEBUG_PUB_PRV_EVENT(listener->name, ev->event);
   return xQueueSendToBack(listener->queueHandle, &ev, xTicksToWait);
 }
 
@@ -420,16 +424,21 @@ TaskHandle_t initEventBus(void) {
 #endif
 
   mp_init(POOL_SIZE_CALC(EVENT_BUS_POOL_SM_SZ), EVENT_BUS_POOL_SM_CT,
-          smEventPool, &mpSmall);
+      smEventPool, &mpSmall);
   mp_init(POOL_SIZE_CALC(EVENT_BUS_POOL_MD_SZ), EVENT_BUS_POOL_MD_CT,
-          mdEventPool, &mpMed);
+      mdEventPool, &mpMed);
   mp_init(POOL_SIZE_CALC(EVENT_BUS_POOL_LG_SZ), EVENT_BUS_POOL_LG_CT,
-          lgEventPool, &mpLarge);
+      lgEventPool, &mpLarge);
+#ifdef TRC_USE_TRACEALYZER_RECORDER
+#if DEBUG
+  vTraceSetQueueName(xQueueCmd, "events");
+#endif
+#endif
   return processHandle;
 }
 
 void *eventAlloc(size_t size, uint32_t eventId, uint16_t publisherId) {
-  event_t *val;
+  event_t *val = NULL;
   DYN_ALLOC_T dyn = DYN_ALLOC_NONE;
   configASSERT(size >= sizeof(event_t));
   configASSERT(size <= POOL_SIZE_CALC(EVENT_BUS_POOL_LG_SZ));
@@ -470,6 +479,7 @@ void eventRelease(event_t *ev, event_listener_t *listener) {
         evResponse = EVENT_BUS_TIME_SOURCE - ev->publishTime;
         if (evResponse > eventMaxResponse[ev->event]) {
           eventMaxResponse[ev->event] = evResponse;
+          eventMaxRespList[ev->event] = listener;
         }
         if (evResponse < eventMinResponse[ev->event] || !eventMinResponse[ev->event]) {
           eventMinResponse[ev->event] = evResponse;
@@ -521,23 +531,25 @@ uint32_t eventListenerInfo(char * const buf, uint32_t bufLen) {
 uint32_t eventResponseInfo(char *const buf, uint32_t bufLen) {
   uint32_t pLen;
   uint32_t i;
-  pLen = snprintf(buf, bufLen, "ID      min       max\r\n");
+  pLen = snprintf(buf, bufLen, "ID     min(ms)   max(ms)\r\n");
   if (pLen >= bufLen) {
     return bufLen;
   }
   vTaskSuspendAll();
   for (i = 0; i < EVENT_BUS_BITS; i++) {
     if (eventMinResponse[i] || eventMaxResponse[i]) {
-      pLen += snprintf(&buf[pLen], bufLen - pLen, "%2i  %4i.%03i  %4i.%03i\r\n", i,
+      pLen += snprintf(&buf[pLen], bufLen - pLen, "%2i  %4i.%03i  %4i.%03i (%s)\r\n", i,
           eventMinResponse[i] / EVENT_BUS_TIME_DIV_US / 1000,
           eventMinResponse[i] / EVENT_BUS_TIME_DIV_US % 1000,
           eventMaxResponse[i] / EVENT_BUS_TIME_DIV_US / 1000,
-          eventMaxResponse[i] / EVENT_BUS_TIME_DIV_US % 1000);
+          eventMaxResponse[i] / EVENT_BUS_TIME_DIV_US % 1000,
+          eventMaxRespList[i] == NULL ? "?" : eventMaxRespList[i]->name);
       if (pLen >= bufLen) {
         xTaskResumeAll();
         return bufLen;
       }
       eventMinResponse[i] = eventMaxResponse[i] = 0;
+      eventMaxRespList[i] = NULL;
     }
   }
   xTaskResumeAll();
