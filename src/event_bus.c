@@ -375,7 +375,11 @@ BaseType_t publishToListener(event_listener_t *listener, event_t *ev,
   ev->publishTime = EVENT_BUS_TIME_SOURCE;
   xTaskResumeAll();
   EVENT_BUS_DEBUG_PUB_PRV_EVENT(listener->name, ev->event);
-  return xQueueSendToBack(listener->queueHandle, &ev, xTicksToWait);
+  BaseType_t ret = xQueueSendToBack(listener->queueHandle, &ev, xTicksToWait);
+  if (!ret) {
+    eventRelease(ev, listener);
+  }
+  return ret;
 }
 
 void invalidateEvent(event_t *ev) {
